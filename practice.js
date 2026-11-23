@@ -3,7 +3,7 @@
 // mode 'online': 8-ball against a friend on another PC (online.js connects; this file plays the table).
 //
 // How online play stays in step (both PCs run the same rules, see HANDOFF.md):
-// - Every action (place, call, shoot) gets a number (seq) in its game and is applied on both PCs in that order.
+// - Every action (place, shoot) gets a number (seq) in its game and is applied on both PCs in that order.
 // - Online, the rules are stepped only while balls roll or when an action is applied; a resting table does not
 //   tick. So both PCs make exactly the same ticks, whatever their frame rate or the network delay. An action that
 //   arrives while this PC's balls still roll waits until they have settled.
@@ -65,8 +65,7 @@ export function startPractice(o) {
     wrongBall: 'the wrong ball was hit first', noCushion: 'no ball reached a cushion after the hit', ballOffTable: 'a ball left the table',
   };
   const ENDS = {
-    eight: 'sank the 8 in the called pocket', eightEarly: 'sank the 8 too early', eightWrongPocket: 'sank the 8 in the wrong pocket',
-    eightOnFoul: 'sank the 8 on a foul', eightOffTable: 'knocked the 8 off the table',
+    eight: 'sank the 8', eightEarly: 'sank the 8 too early', eightOnFoul: 'sank the 8 on a foul', eightOffTable: 'knocked the 8 off the table',
   };
   let message = '';            // the small text line: a foul, or who is to shoot
   // test only (look stage): ?view=top ?look=break|pot|rail|raised ?freeze=seconds ?cam=name
@@ -237,7 +236,6 @@ export function startPractice(o) {
     // while the balls roll, behind the ball, the mouse looks around (both players online); it never touches the aim
     input.setLook(state.phase === 'rolling' && !fromAbove && !testQ.get('cam'));
     const inp = input.poll(dt);
-    const target = isMatch && rules.shooterTarget ? rules.shooterTarget(state) : 'open';
     for (const name of inp.pressed) {
       if (name === 'rematch' && isMatch && state.phase === 'over') { if (online) pressRematch(); else rack(state.winner); continue; }
       if (name === 'switchView' && !ghost && allowTop && !(online && state.phase === 'place')) { view.setMode(view.getMode() === 'top' ? 'aim' : 'top'); showButtons(); }
@@ -264,20 +262,7 @@ export function startPractice(o) {
       if (inp.spinDX || inp.spinDY) setSpin(spinX + inp.spinDX, spinY + inp.spinDY);
       if (inp.elevSet !== null) setElev(inp.elevSet);
       if (inp.elevDelta) setElev(elevDeg + inp.elevDelta);
-      // on the 8 you call the pocket first: a click on a pocket calls it, and that click never shoots
-      let called = false;
-      if (target === 'eight' && inp.tap) {
-        let best = -1, bestD = 46;
-        for (let i = 0; i < geom.pockets.length; i++) {
-          const s = view.tableToScreen(geom.pockets[i].x, geom.pockets[i].z), d = Math.hypot(s.x - inp.tap.x, s.y - inp.tap.y);
-          if (d < bestD) { bestD = d; best = i; }
-        }
-        if (best >= 0) { act({ type: 'call', pocket: best }, 0); called = true; }
-      }
-      if (inp.shoot && !called) {
-        if (target === 'eight' && state.calledPocket < 0) message = NAMES[state.turn] + ': call the pocket for the 8 first. Click a pocket';
-        else queueShot(inp.shoot.pull);
-      }
+      if (inp.shoot) queueShot(inp.shoot.pull);
     } else if (free && state.phase === 'place' && ghost) {
       // the cue ball in hand follows the cursor
       const t = inp.pointerX >= 0 ? view.screenToTable(inp.pointerX, inp.pointerY) : null;
@@ -312,7 +297,7 @@ export function startPractice(o) {
     const aiming = state.phase === 'aim';
     const contact = aiming && AIM_HELP[aimHelp] !== 'none' ? firstContact(state, data, dirX, dirZ) : null;
 
-    if (isMatch) showMatch(target);
+    if (isMatch) showMatch();
     const mine = aiming && free;
     hud.power.style.visibility = mine ? 'visible' : 'hidden';
     hud.spinBox.style.visibility = mine ? 'visible' : 'hidden';
@@ -336,23 +321,16 @@ export function startPractice(o) {
       peek: inp.peek, lookDelta: inp.lookDelta });
   }
 
-  /** The match part of the screen: whose turn, which balls, the small text line, the called pocket, the end. */
-  function showMatch(target) {
+  /** The match part of the screen: whose turn, which balls, the small text line, the end. */
+  function showMatch() {
     for (let p = 0; p < 2; p++) {
       const g = state.groups[p], left = rules.ballsLeft ? rules.ballsLeft(state, p) : 7;
       hud.who[p].classList.toggle('turn', state.phase !== 'over' && state.turn === p);
       hud.grp[p].textContent = g === 'open' ? 'open table' : left > 0 ? (g === 'solid' ? 'solids' : 'stripes') + ' · ' + left + ' left' : 'on the 8';
     }
     const over = state.phase === 'over';
-    const theirs = online && state.turn !== me;
-    let line = over ? '' : target === 'eight' && state.phase === 'aim' && state.calledPocket < 0 && !message.includes('call the pocket')
-      ? (theirs ? NAMES[state.turn] + ' is on the 8 and calls a pocket' : says(state.turn, 'is on the 8: click a pocket to call it', 'are on the 8: click a pocket to call it')) : message;
     const netLine = online ? online.statusText() : '';
-    if (netLine) line = netLine;
-    hud.matchMsg.textContent = line;
-    const mark = state.phase === 'aim' && state.calledPocket >= 0 ? geom.pockets[state.calledPocket] : null;
-    hud.pocketMark.hidden = !mark;
-    if (mark) { const s = view.tableToScreen(mark.x, mark.z); hud.pocketMark.style.left = s.x + 'px'; hud.pocketMark.style.top = s.y + 'px'; }
+    hud.matchMsg.textContent = netLine || (over ? '' : message);
     if (hud.overPanel.hidden === over) {
       hud.overPanel.hidden = !over;
       if (over) {
@@ -383,11 +361,11 @@ export function startPractice(o) {
   if (online) labels.forEach((b, i) => { if (b) b.textContent = NAMES[i]; });
   hud.matchBar.hidden = !isMatch; hud.matchMsg.hidden = !isMatch; hud.rackBtn.hidden = isMatch;
   hud.aimHelpBtn.hidden = !!online; hud.viewBtn.hidden = !allowTop;
-  hud.pocketMark.hidden = true; hud.overPanel.hidden = true; hud.overWait.hidden = true; hud.rematchBtn.disabled = false;
+  hud.overPanel.hidden = true; hud.overWait.hidden = true; hud.rematchBtn.disabled = false;
 
   function stop() {
     if (!running) return;
-    hud.matchBar.hidden = true; hud.matchMsg.hidden = true; hud.pocketMark.hidden = true; hud.overPanel.hidden = true; hud.rackBtn.hidden = false;
+    hud.matchBar.hidden = true; hud.matchMsg.hidden = true; hud.overPanel.hidden = true; hud.rackBtn.hidden = false;
     hud.aimHelpBtn.hidden = false; hud.viewBtn.hidden = false; hud.overWait.hidden = true; hud.rematchBtn.disabled = false;
     labels.forEach((b, i) => { if (b) b.textContent = oldLabels[i]; });
     running = false;
@@ -667,8 +645,6 @@ export function startPractice(o) {
     },
     /** Test only: move the cue ball in hand as the mouse would. */
     moveGhost(x, z) { if (ghost) { ghost.x = x; ghost.z = z; ghost.ok = canPlaceCue(state, data, x, z); } return ghost; },
-    /** Match only: call a pocket for the 8 (index into the table's pockets). */
-    call(pocket) { return act({ type: 'call', pocket }, 0); },
     message: () => message,
     setView(m) { if (m !== 'top' || allowTop) view.setMode(m); showButtons(); return view.getMode(); },
     setAimHelp(name) { if (!online) aimHelp = Math.max(0, AIM_HELP.indexOf(name)); showButtons(); return AIM_HELP[aimHelp]; },

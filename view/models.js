@@ -6,7 +6,7 @@ import * as THREE from '../lib/three.module.min.js';
 import { feltSurfaceTexture, feltColourTexture, feltDetailNormal, woodTexture, ballTexture, cueTextures, makeRandom, radialTexture } from './textures.js';
 
 /** Felt colours (sRGB), chosen to stay rich under the warm lamp light. */
-export const FELT_COLOURS = { green: 0x17643c, blue: 0x1a4f86, red: 0x6e1822 };
+export const FELT_COLOURS = { green: 0x17643c, blue: 0x1a4f86, red: 0x6e1822, purple: 0x38227a, black: 0x0f141f };   // purple and black: item 37
 
 /**
  * Picture quality. Low still looks right; it draws fewer pixels, with smaller pictures and simpler finishes.
@@ -275,7 +275,12 @@ export function buildTableModel(geom, table, feltColour, opts = {}) {
 
   // ---- materials
   const fc = new THREE.Color(feltColour);
-  const sheenOf = c => c.clone().multiplyScalar(1.6).lerp(new THREE.Color(1, 1, 1), 0.06);
+  // The cloth's soft sheen: the felt colour, lifted a little toward white. On a very dark felt (black) that white
+  // lift is most of what shows, and the warm lamp turns it brown; there it is a fainter, cool lift instead.
+  const sheenOf = c => {
+    const dark = c.r * 0.2126 + c.g * 0.7152 + c.b * 0.0722 < 0.02;
+    return c.clone().multiplyScalar(1.6).lerp(dark ? new THREE.Color(0.28, 0.5, 1) : new THREE.Color(1, 1, 1), dark ? 0.03 : 0.06);
+  };
   const Felt = q.physical ? THREE.MeshPhysicalMaterial : THREE.MeshStandardMaterial;
   const feltProps = q.physical ? { sheen: 0.6, sheenRoughness: 0.55, sheenColor: sheenOf(fc) } : {};
   const felt = keep(new Felt({ color: 0xffffff, roughness: 0.92, metalness: 0, map: feltTex, normalMap: bedDetail, normalScale: new THREE.Vector2(0.4, 0.4), ...feltProps }));

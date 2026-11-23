@@ -11,7 +11,7 @@ const $ = id => document.getElementById(id);
 const query = new URLSearchParams(location.search);
 const settings = loadSettings();
 // Test switches in the address win over the saved settings for this run only, and are never saved:
-// ?mute=1 (silent), ?quality=low|medium|high, ?felt=green|blue|red. A choice made on the settings screen replaces them.
+// ?mute=1 (silent), ?quality=low|medium|high, ?felt=green|blue|red|purple|black. A choice made on the settings screen replaces them.
 const forced = {
   quality: QUALITY_CHOICES.includes(query.get('quality')) ? query.get('quality') : null,
   felt: FELT_CHOICES.includes(query.get('felt')) ? query.get('felt') : null,
@@ -79,6 +79,17 @@ const settingsScreen = createSettingsScreen({
 });
 bindPageButton($('settingsBtn'), () => settingsScreen.open());
 bindPageButton($('hudSettingsBtn'), () => settingsScreen.open());
+
+// Full screen (item 39): on one screen the cursor cannot slide off the game while setting power.
+const fullBtn = $('fullBtn');
+const showFull = () => { fullBtn.textContent = document.fullscreenElement ? 'Leave full screen' : 'Full screen'; };
+if (!document.documentElement.requestFullscreen) fullBtn.hidden = true;
+bindPageButton(fullBtn, () => {
+  if (document.fullscreenElement) document.exitFullscreen();
+  else { const p = document.documentElement.requestFullscreen(); if (p && p.catch) p.catch(() => {}); }
+});
+document.addEventListener('fullscreenchange', showFull);
+showFull();
 
 // Debug helpers hang off this one object and nowhere else.
 window.GAME = {
@@ -157,7 +168,7 @@ async function openPractice(mode, link) {
       canvas: gameCanvas, data: { table, physics }, controls, tracks, input, look: look(),
       mode, online: link, foulRule: query.get('foul') === 'line' ? 'behindLine' : 'anywhere',   // the local match: ?foul=line (online: the lobby setting)
       noHitFoul: query.get('nohit') === 'foul',   // the local match: ?nohit=foul makes the cue ball hitting nothing a foul (online: the lobby setting)
-      hud: { matchBar: $('matchBar'), matchMsg: $('matchMsg'), pocketMark: $('pocketMark'), overPanel: $('overPanel'), overText: $('overText'), overWhy: $('overWhy'),
+      hud: { matchBar: $('matchBar'), matchMsg: $('matchMsg'), overPanel: $('overPanel'), overText: $('overText'), overWhy: $('overWhy'),
         overWait: $('overWait'), rematchBtn: $('rematchBtn'),
         who: [$('who0'), $('who1')], grp: [$('grp0'), $('grp1')], rackBtn: $('rackBtn'),
         hint: $('hint'), power: $('power'), powerFill: $('powerFill'), aimHelpBtn: $('aimHelpBtn'), viewBtn: $('viewBtn'),

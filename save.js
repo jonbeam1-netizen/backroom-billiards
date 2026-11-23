@@ -22,7 +22,7 @@ const KEY = 'backroomBilliards.v' + SAVE_VERSION;
 
 /** The choices the settings screen offers (anything else in the save falls back to the default). */
 export const QUALITY_CHOICES = ['low', 'medium', 'high'];
-export const FELT_CHOICES = ['green', 'blue', 'red'];
+export const FELT_CHOICES = ['green', 'blue', 'red', 'purple', 'black'];
 export const AIM_SPEED_MIN = 0.25, AIM_SPEED_MAX = 3;
 
 /**

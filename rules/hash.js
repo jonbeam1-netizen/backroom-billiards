@@ -29,7 +29,6 @@ export function cloneState(state) {
     o.breaker = s.breaker;
     o.breakShot = s.breakShot;
     o.groups = [s.groups[0], s.groups[1]];
-    o.calledPocket = s.calledPocket;
     o.placeBehindLine = s.placeBehindLine;
     o.winner = s.winner;
     o.overReason = s.overReason;
@@ -99,7 +98,6 @@ export function hashState(state) {
     addNumber(s.breakShot ? 1 : 0);
     addNumber(s.groups.length);
     for (let i = 0; i < s.groups.length; i++) addString(s.groups[i]);
-    addNumber(s.calledPocket);
     addNumber(s.placeBehindLine ? 1 : 0);
     addNumber(s.winner);
     addString(s.overReason);

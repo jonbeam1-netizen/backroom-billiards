@@ -66,7 +66,6 @@ function setUpMatch(state, o) {
   s.turn = breaker;
   s.breakShot = true;
   s.groups = ['open', 'open'];
-  s.calledPocket = -1;
   s.placeBehindLine = true;
   s.winner = -1;
   s.overReason = '';

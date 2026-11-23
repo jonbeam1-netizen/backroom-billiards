@@ -61,8 +61,8 @@ export function shooterTarget(state) {
 }
 
 /**
- * One action in a match. 'place' obeys placeBehindLine; 'call' only while the shooter is on the 8 in
- * phase 'aim'; 'shoot' only in phase 'aim', and on the 8 only once a pocket is called.
+ * One action in a match. 'place' obeys placeBehindLine; 'shoot' only in phase 'aim'.
+ * Any other action is ignored.
  * @param {Object} state @param {{table:Object, physics:Object}} data @param {TableGeometry} geo
  * @param {PhysicsConst} k @param {Object} a @param {GameEvent[]} events
  */
@@ -71,10 +71,8 @@ export function applyMatchAction(state, data, geo, k, a, events) {
   const cue = state.balls[0];
   if (a.type === 'shoot') {
     if (state.phase !== 'aim' || cue.where !== 'table') return;
-    const target = shooterTarget(state);
-    if (target === 'eight' && state.calledPocket < 0) return;
     const shot = emptyShot();
-    shot.target = target;
+    shot.target = shooterTarget(state);
     state.shot = shot;
     strike(cue, a, geo, k, events);
     state.phase = 'rolling';
@@ -87,11 +85,6 @@ export function applyMatchAction(state, data, geo, k, a, events) {
     cue.moving = false;
     state.placeBehindLine = false;
     state.phase = 'aim';
-  } else if (a.type === 'call') {
-    if (state.phase !== 'aim' || shooterTarget(state) !== 'eight') return;
-    const p = a.pocket;
-    if (typeof p !== 'number' || p !== Math.floor(p) || p < 0 || p >= geo.pockets.length) return;
-    state.calledPocket = p;
   }
 }
 
@@ -172,7 +165,6 @@ export function judgeShot(state, data, geo, k, events) {
     state.turn = state.breaker;
     state.breakShot = true;
     state.groups = ['open', 'open'];
-    state.calledPocket = -1;
     state.lastFoul = '';
     state.placeBehindLine = true;
     state.shot = emptyShot();
@@ -182,13 +174,12 @@ export function judgeShot(state, data, geo, k, events) {
 
   const foul = shotFoul(sh, wasBreak, state.settings.noHitFoul === true);
 
-  // 2. The 8 is gone: the game ends.
+  // 2. The 8 is gone: the game ends. Sunk in any pocket on a clean shot once your group is gone: a win.
   if (eightDown || eightOff) {
     let reason = '';
     if (eightOff) reason = 'eightOffTable';
     else if (sh.target !== 'eight') reason = 'eightEarly';
     else if (foul !== '') reason = 'eightOnFoul';
-    else if (sh.pottedPockets[indexOf(sh.potted, 8)] !== state.calledPocket) reason = 'eightWrongPocket';
     else reason = 'eight';
     if (foul !== '') events.push({ type: 'foul', player: me, reason: foul });
     const winner = reason === 'eight' ? me : other;
@@ -196,7 +187,6 @@ export function judgeShot(state, data, geo, k, events) {
     state.winner = winner;
     state.overReason = reason;
     state.lastFoul = foul;
-    state.calledPocket = -1;
     state.breakShot = false;
     state.placeBehindLine = false;
     state.phase = 'over';
@@ -209,7 +199,6 @@ export function judgeShot(state, data, geo, k, events) {
     state.lastFoul = foul;
     state.turn = other;
     state.breakShot = false;
-    state.calledPocket = -1;
     putCueInHand(state.balls[0]);
     state.placeBehindLine = state.settings.foulRule === 'behindLine';
     state.phase = 'place';
@@ -238,18 +227,7 @@ export function judgeShot(state, data, geo, k, events) {
   const next = goesOn ? me : other;
   state.turn = next;
   state.breakShot = false;
-  state.calledPocket = -1;
   state.placeBehindLine = false;
   state.phase = 'aim';
   events.push({ type: 'turn', player: next });
-}
-
-/**
- * Index of a value in a list, or -1.
- * @param {number[]} list @param {number} v
- * @returns {number}
- */
-function indexOf(list, v) {
-  for (let i = 0; i < list.length; i++) if (list[i] === v) return i;
-  return -1;
 }

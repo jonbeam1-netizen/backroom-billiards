@@ -8,7 +8,7 @@
 //   the table (practice.js):  act, aim, check, needState, state, rematch (and start again for a rematch)
 
 /** Raised when a message changes shape; both sides must have the same one (the play-test number is checked too). */
-export const PROTOCOL = 2;   // 2: the lobby settings and the createGame opts carry noHitFoul
+export const PROTOCOL = 3;   // 2: the lobby settings and the createGame opts carry noHitFoul; 3: no 'call' action (the 8 needs no called pocket)
 
 /** Join codes: 4 characters, no look-alikes (no I, L, O, 0, 1). */
 export const CODE_LENGTH = 4;
@@ -95,7 +95,7 @@ const FIELDS = {
   resume: { game: 'number', opts: 'object', settings: 'object', state: 'object', seq: 'number', queue: 'array', rematch: 'object' },
 
   // -- the table (practice.js, online mode)
-  /** both ways: a player's action (place, call or shoot). seq counts actions from 1 in each game; by = 0 host, 1 friend.
+  /** both ways: a player's action (place or shoot). seq counts actions from 1 in each game; by = 0 host, 1 friend.
    *  pull (0 to 1) is only for drawing the cue's stroke */
   act: { game: 'number', seq: 'number', by: 'number', action: 'object', pull: 'number' },
   /** shooter -> other, about 12 times a second: the cue as it is now, for drawing. ghost is the cue ball in hand or null */

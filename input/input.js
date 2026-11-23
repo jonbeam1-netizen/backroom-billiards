@@ -99,7 +99,6 @@ export function bindTextField(el, o) {
  * @property {number} pointerX     the cursor over the table, pixels from its left edge, or -1 when it is elsewhere
  * @property {number} pointerY     and from its top edge
  * @property {boolean} confirm     cue ball in hand: put it down
- * @property {{x:number, y:number}|null} tap   where a left click landed on the table this frame (pixels from its top left)
  * @property {{x:number, y:number}|null} spinSet   the hit point was clicked on the cue ball picture (-1 to 1, 1 = edge)
  * @property {number} spinDX       move the hit point by this much (right)
  * @property {number} spinDY       and this much (up)
@@ -131,8 +130,6 @@ export function createInput(target, controls) {
   let aim = 0, pullPx = 0, holding = false, confirm = false, fine = false;
   let left = false, right = false;
   let pointerX = -1, pointerY = -1;
-  /** @type {{x:number, y:number}|null} */
-  let tap = null;              // where a left click landed on the table this frame (the game uses it to call a pocket)
   let axisX = 0, axisY = -1;   // the way the cue points on the screen; pulling back is moving the mouse against it
   /** @type {{pull:number}|null} */
   let shoot = null;
@@ -218,7 +215,6 @@ export function createInput(target, controls) {
     if (mode === 'off' || mode === 'watch') return;
     if (e.button === 0) {
       // one left click on the table shoots, and only from the power state; it does nothing else
-      if (!captured()) { const r = target.getBoundingClientRect(); tap = { x: e.clientX - r.left, y: e.clientY - r.top }; }
       if (mode === 'place') confirm = true;
       else if ((mode === 'aim' || mode === 'point') && wanted) {
         // a left click while aiming goes back to the power state (Jon, 2026-11-23); it never shoots
@@ -423,11 +419,11 @@ export function createInput(target, controls) {
         aimDelta: aim, pull: pullPx / controls.power.pullPixels, holding, shoot,
         aiming: aimOn(), free: stick, pointing: mode === 'point' && wanted,
         power: (mode === 'aim' || mode === 'point') && !wanted,
-        pointerX, pointerY, confirm, pressed, tap,
+        pointerX, pointerY, confirm, pressed,
         spinSet, spinDX, spinDY, elevSet, elevDelta,
         peek: peek && tableOn && !paused, lookDelta, looking: look, lookCaptured: look && captured(),
       };
-      aim = 0; shoot = null; confirm = false; pressed = []; tap = null;
+      aim = 0; shoot = null; confirm = false; pressed = [];
       spinSet = null; spinDX = 0; spinDY = 0; elevSet = null; elevDelta = 0;
       return f;
     },

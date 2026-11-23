@@ -20,7 +20,7 @@ const SETTLE_CAP_TICKS = 60 * 600;
 /**
  * Advances the game by one tick, mutating `state` in place.
  * 'shoot' is taken only in phase 'aim'; 'place' only in phase 'place'. Other actions are ignored.
- * In a match (mode 'match') the rules of match.js apply: 'call', the 8-ball rules, and the referee's
+ * In a match (mode 'match') the rules of match.js apply: the 8-ball rules, and the referee's
  * events in the tick the balls settle.
  * @param {GameState} state
  * @param {{table:Object, physics:Object}} data

@@ -99,7 +99,7 @@
     background: linear-gradient(180deg, #a59a80, #857a62 60%, #6c624d); border-color: #4c4434;
     box-shadow: 0 2px 0 #4c4434, 0 3px 8px rgba(0,0,0,.5), inset 0 1px 0 rgba(255,250,230,.25); }
   button:disabled::before, button:disabled::after { background: radial-gradient(circle at 35% 35%, #d8d0bc, #7d735e 60%, #4a4232); }
-  /* the match: whose turn, which balls, the small foul line, the called pocket, the end of the game */
+  /* the match: whose turn, which balls, the small foul line, the end of the game */
   #matchBar { position: absolute; left: 50%; top: 52px; transform: translateX(-50%); display: flex; gap: 10px; }
   #matchBar .who { min-width: clamp(120px, 20vw, 190px); padding: 5px 12px 6px; text-align: center; border-radius: 4px;
     border: 1px solid rgba(201,162,74,.45); background: rgba(8,24,14,.72); color: var(--ink-soft); font-size: clamp(13px, 1.6vw, 15px);
@@ -108,8 +108,6 @@
   #matchBar .who.turn { border-color: var(--brass-light); color: var(--ink); box-shadow: 0 0 0 1px var(--brass), 0 2px 10px rgba(0,0,0,.6); background: rgba(20,60,34,.86); }
   #matchMsg { position: absolute; left: 0; right: 0; top: 112px; text-align: center; font-size: clamp(13px, 1.7vw, 15px);
     color: var(--ink); text-shadow: 0 1px 3px #000, 0 0 8px #000; padding: 0 10px; }
-  #pocketMark { position: absolute; width: 34px; height: 34px; margin: -17px 0 0 -17px; border-radius: 50%; box-sizing: border-box;
-    border: 3px solid var(--brass-light); box-shadow: 0 0 8px rgba(0,0,0,.8), inset 0 0 6px rgba(0,0,0,.6); }
   #overPanel { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); }
   #overPanel h2 { margin: 0; font-size: clamp(22px, 4.4vw, 34px); letter-spacing: .04em; text-shadow: 0 2px 0 rgba(0,0,0,.5); }
   #note { margin: 12px 0 0; font-size: 14px; color: var(--ink-soft); min-height: 1em; }
@@ -161,9 +159,11 @@
     box-shadow: 0 1px 0 #6a4f16, 0 1px 4px rgba(0,0,0,.6), inset 0 2px 4px rgba(80,55,10,.4), 0 0 0 2px rgba(246,231,176,.55); }
   .choice { gap: 8px; }
   .choice button { flex: 1 1 0; padding: 6px 12px; }
+  /* five felt colors: two rows (three and two), each plate wide enough for its dot and its name */
+  #feltChoice button { flex: 1 1 28%; white-space: nowrap; padding: 6px 16px; }
   .sw { display: inline-block; width: 13px; height: 13px; margin: 0 7px -2px 0; border-radius: 50%; border: 1px solid rgba(40,25,5,.7);
     box-shadow: inset 0 1px 2px rgba(255,255,255,.25), 0 1px 1px rgba(255,240,200,.4); }
-  .sw.green { background: #17643c; } .sw.blue { background: #1a4f86; } .sw.red { background: #6e1822; }
+  .sw.green { background: #17643c; } .sw.blue { background: #1a4f86; } .sw.red { background: #6e1822; } .sw.purple { background: #38227a; } .sw.black { background: #14161b; }
   @media (max-width: 460px) { .setGrid { grid-template-columns: 1fr; gap: 4px; } .setName { margin-top: 6px; } }
   /* the small line at the table while fine aim is kept on */
   #fineNote { position: absolute; left: 0; right: 0; bottom: 74px; text-align: center; font-size: 13px; letter-spacing: .04em; color: var(--brass-light);
@@ -185,6 +185,7 @@
     <button id="viewBtn" type="button">View</button>
     <button id="aimHelpBtn" type="button">Aim help</button>
     <button id="hudSettingsBtn" type="button">Settings</button>
+    <button id="fullBtn" type="button">Full screen</button>
   </div>
   <div id="spinBox">
     <div id="spinPad"><div id="spinLimit"></div><div id="spinDot"></div></div>
@@ -196,7 +197,6 @@
     <div class="who" id="who1"><b>Player 2</b><span id="grp1"></span></div>
   </div>
   <div id="matchMsg" hidden></div>
-  <div id="pocketMark" hidden></div>
   <div id="overPanel" class="panel" hidden>
     <h2 id="overText"></h2>
     <p class="sub" id="overWhy"></p>
@@ -277,7 +277,7 @@
       </div>
       <div class="setName">Felt color</div>
       <div class="setCtl choice" id="feltChoice">
-        <button type="button" data-v="green"><i class="sw green"></i>Green</button><button type="button" data-v="blue"><i class="sw blue"></i>Blue</button><button type="button" data-v="red"><i class="sw red"></i>Red</button>
+        <button type="button" data-v="green"><i class="sw green"></i>Green</button><button type="button" data-v="blue"><i class="sw blue"></i>Blue</button><button type="button" data-v="red"><i class="sw red"></i>Red</button><button type="button" data-v="purple"><i class="sw purple"></i>Purple</button><button type="button" data-v="black"><i class="sw black"></i>Black</button>
       </div>
       <p class="setNote" id="lookNote" hidden>The address set the picture quality or felt color for this run.</p>
     </div>

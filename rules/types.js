@@ -118,11 +118,11 @@
 // - You keep shooting while you sink a ball of your own without a foul (on an open table: any ball but
 //   the 8; on the break: any ball). Otherwise the turn passes.
 // - A numbered ball that leaves the table stays out and counts as sunk for its group (and it is a foul).
-// - The 8: you may only shoot at it once your group is gone, and you must call a pocket first.
-//   You win by sinking it in the called pocket without a foul. You lose by: sinking it before your
-//   group is gone; sinking it in another pocket than the called one; sinking it on a shot that is a
-//   foul (for example the cue ball drops too); the 8 leaving the table (except on the break). If you foul on the 8 shot and
-//   the 8 stays up, it is only a foul.
+// - The 8: you may only shoot at it once your group is gone. No pocket is called (changed 2026-11-23,
+//   HANDOFF item 38: you used to click a pocket first, and the 8 in another pocket lost).
+//   You win by sinking it in any pocket without a foul. You lose by: sinking it before your
+//   group is gone; sinking it on a shot that is a foul (for example the cue ball drops too); the 8
+//   leaving the table (except on the break). If you foul on the 8 shot and the 8 stays up, it is only a foul.
 
 /**
  * The host's choices for a match.
@@ -142,10 +142,9 @@
  * @property {0|1} breaker           who broke (or breaks) this rack
  * @property {boolean} breakShot     the next shot is the break
  * @property {('open'|'solid'|'stripe')[]} groups   per player; both 'open' until groups are given out
- * @property {number} calledPocket   the pocket called for the 8 (index into TableGeometry.pockets), or -1
  * @property {boolean} placeBehindLine   while phase is 'place': the cue ball may only go behind the line
  * @property {number} winner         -1 while playing, else 0 or 1
- * @property {''|'eight'|'eightEarly'|'eightWrongPocket'|'eightOnFoul'|'eightOffTable'} overReason
+ * @property {''|'eight'|'eightEarly'|'eightOnFoul'|'eightOffTable'} overReason
  * @property {''|'scratch'|'cueOffTable'|'noHit'|'wrongBall'|'noCushion'|'ballOffTable'} lastFoul
  *           the foul of the last finished shot, '' if it was clean (for the small text line)
  * @property {Object} shot           what has happened during the shot now rolling (kept in the state so a
@@ -159,12 +158,9 @@
  * noHitFoul is false unless it is exactly true.
  * Without `breaker` the first break is a coin flip from the seed.
  *
- * Extra action in a match:
- * @typedef {Object} CallAction
- * @property {'call'} type     call the pocket for the 8 (only matters while the shooter is on the 8)
- * @property {number} pocket   index into TableGeometry.pockets
- *
- * A 'shoot' action is ignored while the shooter is on the 8 and no pocket is called.
+ * A match has no extra actions: 'place' and 'shoot' as in practice. (The 'call' action for the 8's
+ * pocket was removed 2026-11-23, HANDOFF item 38; a state kept from before may still carry a
+ * calledPocket field, which is ignored: not copied by cloneState and not in the hash.)
  * A 'place' action obeys placeBehindLine. canPlaceCue() answers for the current state.
  *
  * Extra events in a match (GameEvent.type):
