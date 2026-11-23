@@ -29,7 +29,13 @@
     "aimFov": 46,
     "follow": 9,
     "topFov": 28,
-    "topMargin": 0.1
+    "topMargin": 0.1,
+    "_aboutPeek": "Peek (item 34): while the spacebar is held, in the view behind the ball, the camera rises by rise metres and moves over the ball by over metres, and looks lookAhead metres further down the table. seconds: how long the rise (and the drop back) takes; it eases in and out, so there is no snap. Kept slight on purpose: it is not the view from above.",
+    "peek": { "rise": 0.22, "over": 0.1, "lookAhead": 0, "seconds": 0.32 },
+    "_aboutLook": "Look around while the balls roll (item 33), in the view behind the ball: the camera stays where it is and turns in place. radPerPixel: with the captured mouse, how far it turns per pixel of mouse movement. stickRadPerSec: with the free cursor (browser will not capture the mouse), the turning speed at the screen edge; it works like the aiming stick (aim.centerDeadShare, aim.centerCurve). armPixels: with the free cursor, nothing turns until the cursor has moved this far after the shot, so the view never turns by itself. Aim sensitivity in the settings multiplies both. When the balls stop the view glides back behind the cue ball at the follow speed.",
+    "look": { "radPerPixel": 0.0022, "stickRadPerSec": 2.4, "armPixels": 6 },
+    "_aboutMini": "The small view from above (item 32), bottom left, only while the balls roll in the view behind the ball. share: its width as a share of the window width, between minWidth and maxWidth pixels (and never wider than the space left of the power bar). maxHeightShare: at most this share of the window height. left and bottom: pixels from the window's edges. frame: the wood frame's width in pixels. tableMargin: metres of dark round the table. fadeIn and fadeOut: seconds.",
+    "mini": { "share": 0.22, "minWidth": 120, "maxWidth": 300, "maxHeightShare": 0.3, "left": 12, "bottom": 52, "frame": 5, "tableMargin": 0.03, "fadeIn": 0.15, "fadeOut": 0.25 }
   },
   "cue": {
     "_about": "restGap: tip to ball while aiming. pullDistance: how far the cue draws back at full power.",

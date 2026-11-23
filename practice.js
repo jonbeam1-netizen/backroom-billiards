@@ -47,8 +47,10 @@ const AIM_HELP = ['short', 'full', 'none'];
  * @param {() => void} o.onExit
  * @param {'practice'|'match'|'online'} [o.mode]
  * @param {'anywhere'|'behindLine'} [o.foulRule]   match only: where the cue ball may go after a foul
+ * @param {boolean} [o.noHitFoul]                   local match only: the cue ball hitting nothing is a foul (online: the lobby setting)
  * @param {OnlineLink} [o.online]                   online only
  * @param {{quality?:'low'|'medium'|'high', felt?:'green'|'blue'|'red'}} [o.look]   this player's picture settings (never sent)
+ * @param {Object} [o.tracks]                       data/tracks.json: the tracks hard shots leave on the felt (drawing only)
  */
 export function startPractice(o) {
   const { data, controls, input, hud } = o;
@@ -76,7 +78,8 @@ export function startPractice(o) {
   const testSpeed = Math.max(1, Math.min(20, Number(testQ.get('speed')) || 1));
   const geom = buildTable(data, size);
   const picture = o.look || {};
-  const view = createGameView(o.canvas, geom, data, controls, { quality: picture.quality, felt: picture.felt });
+  const view = createGameView(o.canvas, geom, data, controls, { quality: picture.quality, felt: picture.felt, tracks: o.tracks, miniFrame: hud.miniFrame || null });
+  input.setTable(true);
   const prev = new Float32Array(48);
   const phys = data.physics;
   const allowTop = online ? online.settings.allowTop !== false : true;
@@ -105,14 +108,14 @@ export function startPractice(o) {
     record = { opts, shots: [] };
     yaw = 0; pending = []; ghost = null; acc = 0;
     if (viewBeforePlace) { view.setMode(viewBeforePlace); viewBeforePlace = null; }
-    savePrev(); view.snapCamera();
+    savePrev(); view.snapCamera(); view.clearTracks();
     if (isMatch) message = says(state.turn, 'breaks', 'break');
     if (state.phase === 'place') startPlacing();
   }
   /** A fresh rack. In a match `breaker` says who breaks (the winner of the last game); without it, a coin flip. */
   function rack(breaker) {
     const opts = { size, seed: (Date.now() % 4294967296) >>> 0, mode: isMatch ? 'match' : 'practice' };
-    if (isMatch) { opts.foulRule = o.foulRule || 'anywhere'; if (breaker === 0 || breaker === 1) opts.breaker = breaker; }
+    if (isMatch) { opts.foulRule = o.foulRule || 'anywhere'; opts.noHitFoul = o.noHitFoul === true; if (breaker === 0 || breaker === 1) opts.breaker = breaker; }
     newGame(opts);
   }
   function showButtons() {
@@ -192,17 +195,21 @@ export function startPractice(o) {
     if (online) sync.shown.ghost = null;
     if (viewBeforePlace) { view.setMode(viewBeforePlace); viewBeforePlace = null; showButtons(); }
   }
-  /** @param {import('./rules/types.js').GameEvent[]} events */
-  function onEvents(events) {
+  /**
+   * @param {import('./rules/types.js').GameEvent[]} events
+   * @param {Object|null} [shot]   the shoot action applied in this tick, if any (the view takes its direction for the felt track)
+   */
+  function onEvents(events, shot) {
     if (!events.length) return;
-    view.onEvents(events);
+    view.onEvents(events, shot || null);
     playEvents(events);   // the sounds follow the hits
     lastEvents = events; eventCount += events.length;
     let foul = '';
     for (const e of events) {
       if (e.type === 'foul') foul = 'Foul: ' + (FOULS[e.reason] || e.reason) + '. ';
-      else if (e.type === 'rerack') { message = 'The 8 went in on the break: racked again, ' + says(state.turn, 'breaks again', 'break again'); savePrev(); view.snapCamera(); }
-      else if (e.type === 'turn') message = foul + (foul ? says(e.player, 'has the cue ball in hand', 'have the cue ball in hand') : NAMES[e.player] + ' to shoot');
+      else if (e.type === 'rerack') { message = (e.reason === 'eightOffTable' ? 'The 8 left the table on the break' : 'The 8 went in on the break') + ': racked again, ' + says(state.turn, 'breaks again', 'break again'); savePrev(); view.snapCamera(); }
+      else if (e.type === 'turn') message = foul + (foul ? says(e.player, 'has the cue ball in hand', 'have the cue ball in hand')
+        : (state.shot && state.shot.firstHit < 0 ? 'The cue ball hit nothing (no foul). ' : '') + NAMES[e.player] + ' to shoot');
       else if (e.type === 'gameOver') message = '';
     }
     for (const e of events) {
@@ -213,7 +220,7 @@ export function startPractice(o) {
   function tick(acts) {
     savePrev();
     for (const a of acts) record.shots.push({ tick: state.tick, action: a });
-    onEvents(step(state, data, acts));
+    onEvents(step(state, data, acts), acts.find(a => a && a.type === 'shoot') || null);
   }
 
   function frame(ms) {
@@ -227,6 +234,8 @@ export function startPractice(o) {
     const fromAbove = view.getMode() === 'top';
     const free = !online || myTurnFree();       // this player may act now
     input.setMode(!free ? 'watch' : state.phase === 'aim' ? (fromAbove ? 'point' : 'aim') : state.phase === 'place' ? 'place' : 'off');
+    // while the balls roll, behind the ball, the mouse looks around (both players online); it never touches the aim
+    input.setLook(state.phase === 'rolling' && !fromAbove && !testQ.get('cam'));
     const inp = input.poll(dt);
     const target = isMatch && rules.shooterTarget ? rules.shooterTarget(state) : 'open';
     for (const name of inp.pressed) {
@@ -309,17 +318,22 @@ export function startPractice(o) {
     hud.spinBox.style.visibility = mine ? 'visible' : 'hidden';
     showSpin();
     hud.powerFill.style.width = (pull * 100).toFixed(1) + '%';
-    hud.hint.textContent = online && !free ? watchHint()
+    const peekHint = fromAbove ? '' : ' · Space (hold): peek';
+    const waiting = online && !free ? watchHint() : '';
+    hud.hint.textContent = state.phase === 'rolling' && inp.looking
+      ? (inp.lookCaptured ? 'Mouse: look around' : 'Mouse left or right of the middle: look around') + peekHint
+      : online && !free ? waiting + (waiting && state.phase === 'aim' ? peekHint : '')
       : state.phase === 'place'
         ? 'Cue ball in hand' + (state.placeBehindLine ? ' behind the line' : '') + ': move it with the mouse, click to put it down'
         : aiming
           ? (inp.power ? 'Power: move the mouse back to draw the cue · Left click: shoot · Right click: aim · Cue ball picture or W A S D: where the tip hits · Wheel: raise cue'
             : (inp.pointing ? 'Aiming: the cue points at the mouse' : inp.free ? 'Aiming: mouse left or right of the middle turns' : 'Aiming: move the mouse')
-              + ' · Left or right click: back to power')
+              + ' · Left or right click: back to power') + peekHint
           : '';
 
     view.render({ state, prev, alpha: acc / TICK, dt, dirX, dirZ, elevSin: e.sin, elevCos: e.cos, offX, offY,
-      pull, aimHelp: AIM_HELP[aimHelp], contact, ghost: state.phase === 'place' ? shownGhost : null });
+      pull, aimHelp: AIM_HELP[aimHelp], contact, ghost: state.phase === 'place' ? shownGhost : null,
+      peek: inp.peek, lookDelta: inp.lookDelta });
   }
 
   /** The match part of the screen: whose turn, which balls, the small text line, the called pocket, the end. */
@@ -377,7 +391,7 @@ export function startPractice(o) {
     hud.aimHelpBtn.hidden = false; hud.viewBtn.hidden = false; hud.overWait.hidden = true; hud.rematchBtn.disabled = false;
     labels.forEach((b, i) => { if (b) b.textContent = oldLabels[i]; });
     running = false;
-    input.setMode('off'); input.release();
+    input.setMode('off'); input.setTable(false); input.release();
     view.dispose();
     delete window.GAME.debug.practice;
   }
@@ -530,7 +544,7 @@ export function startPractice(o) {
   /** Host: once both pressed Rematch, the next game starts, with the winner breaking. */
   function maybeRematch() {
     if (me !== 0 || !sync.rematch[0] || !sync.rematch[1] || state.phase !== 'over') return;
-    const opts = { size, seed: (Date.now() % 4294967296) >>> 0, mode: 'match', foulRule: online.settings.foulRule, breaker: state.winner };
+    const opts = { size, seed: (Date.now() % 4294967296) >>> 0, mode: 'match', foulRule: online.settings.foulRule, noHitFoul: online.settings.noHitFoul === true, breaker: state.winner };
     const game = sync.game + 1;
     online.send(make.start(game, opts, online.settings));
     startOnlineGame(game, opts);
@@ -637,6 +651,10 @@ export function startPractice(o) {
     spin: () => ({ x: spinX, y: spinY, elevDeg }),
     /** Test only: show this pull (0 to 1) instead of the mouse's; -1 gives the mouse back. */
     setPull(p) { debugPull = p; },
+    /** Test only: true keeps the small view from above away while the balls roll (to measure what it costs). */
+    blockMini(on) { view.blockMini(on); },
+    /** Test only: a fingerprint of the tracks hard shots left on the felt (both players online must have the same). */
+    tracks: () => view.tracksPrint(),
     /** Shoot with a pull of 0 to 1, as if the mouse had done it. Online: only on your turn (returns false otherwise). */
     shoot(pull) {
       if (state.phase !== 'aim') return online ? false : state.phase;

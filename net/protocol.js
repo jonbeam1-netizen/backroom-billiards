@@ -8,7 +8,7 @@
 //   the table (practice.js):  act, aim, check, needState, state, rematch (and start again for a rematch)
 
 /** Raised when a message changes shape; both sides must have the same one (the play-test number is checked too). */
-export const PROTOCOL = 1;
+export const PROTOCOL = 2;   // 2: the lobby settings and the createGame opts carry noHitFoul
 
 /** Join codes: 4 characters, no look-alikes (no I, L, O, 0, 1). */
 export const CODE_LENGTH = 4;
@@ -44,15 +44,17 @@ export function peerIdFor(code) { return PEER_PREFIX + code.toLowerCase(); }
  * @property {'anywhere'|'behindLine'} foulRule   where the cue ball goes after a foul
  * @property {'7'|'8'|'9'} size                   table size in feet
  * @property {boolean} allowTop                   the view from above may be used (placing the cue ball always uses it)
+ * @property {boolean} noHitFoul                  the cue ball touching no ball is a foul (default: not a foul)
  */
 export const SETTING_CHOICES = {
   aimHelp: ['short', 'full', 'none'],
   foulRule: ['anywhere', 'behindLine'],
   size: ['9', '8', '7'],
   allowTop: [true, false],
+  noHitFoul: [false, true],
 };
 /** @returns {MatchSettings} */
-export function defaultSettings() { return { aimHelp: 'short', foulRule: 'anywhere', size: '9', allowTop: true }; }
+export function defaultSettings() { return { aimHelp: 'short', foulRule: 'anywhere', size: '9', allowTop: true, noHitFoul: false }; }
 /**
  * Settings from a message or a save, with anything odd replaced by the default.
  * @param {any} s
@@ -65,6 +67,7 @@ export function cleanSettings(s) {
     foulRule: SETTING_CHOICES.foulRule.includes(o.foulRule) ? o.foulRule : d.foulRule,
     size: SETTING_CHOICES.size.includes(String(o.size)) ? String(o.size) : d.size,
     allowTop: typeof o.allowTop === 'boolean' ? o.allowTop : d.allowTop,
+    noHitFoul: typeof o.noHitFoul === 'boolean' ? o.noHitFoul : d.noHitFoul,   // missing in a match kept from before: the default
   };
 }
 

@@ -86,7 +86,7 @@ function applyAction(state, data, geo, k, a, events) {
  * Plays a recorded game from scratch: makes the game, applies each action on its tick,
  * then steps until the last shot has settled.
  * @param {{table:Object, physics:Object}} data
- * @param {{opts:{size?:string, seed?:number, mode?:'practice'|'match', foulRule?:string, breaker?:number}, shots:{tick:number, action:Action}[]}} record
+ * @param {{opts:{size?:string, seed?:number, mode?:'practice'|'match', foulRule?:string, noHitFoul?:boolean, breaker?:number}, shots:{tick:number, action:Action}[]}} record
  * @returns {{hash:string, state:GameState}}
  */
 export function runReplay(data, record) {

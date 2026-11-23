@@ -39,7 +39,7 @@ function buildEnvironment(renderer, geom, feltHex) {
  * @param {THREE.WebGLRenderer} renderer
  * @param {import('../rules/types.js').TableGeometry} geom
  * @param {Object} table  data/table.json
- * @param {{cueLength:number, quality?:string, felt?:string}} opts
+ * @param {{cueLength:number, quality?:string, felt?:string, marks?:Object}} opts   marks: the tracks from play on the cloth (game view only)
  */
 export function createStage(renderer, geom, table, opts) {
   const R = table.ball.radius;
@@ -90,7 +90,7 @@ export function createStage(renderer, geom, table, opts) {
     if (old.cue) { scene.remove(old.cue); old.cue.userData.dispose(); }
     if (old.ghost) { scene.remove(old.ghost); old.ghost.material.dispose(); }
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, q.pixelRatio));
-    tableModel = buildTableModel(geom, table, FELT_COLOURS[feltName], { quality: q, occlusion: occ });
+    tableModel = buildTableModel(geom, table, FELT_COLOURS[feltName], { quality: q, occlusion: occ, marks: opts.marks });
     scene.add(tableModel.group);
     balls = [];
     for (let id = 0; id < 16; id++) {

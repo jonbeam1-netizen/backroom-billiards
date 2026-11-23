@@ -10,6 +10,7 @@ const LABEL = {
   foulRule: v => 'After a foul: ' + (v === 'behindLine' ? 'behind the line' : 'cue ball anywhere'),
   size: v => 'Table: ' + v + '-foot',
   allowTop: v => 'View from above: ' + (v ? 'allowed' : 'off'),
+  noHitFoul: v => 'Cue ball hits nothing: ' + (v ? 'foul' : 'no foul'),
 };
 const FAILED = {
   unreachable: () => 'Could not reach the join-code service. Check your internet connection and try again.',
@@ -58,7 +59,7 @@ export function createOnline(o) {
   });
   bindPageButton(ui.leaveBtn, () => { leave(); o.showTitle(); });
   bindPageButton(ui.startBtn, () => startMatch());
-  const settingButtons = { aimHelp: ui.setAim, foulRule: ui.setFoul, size: ui.setSize, allowTop: ui.setTop };
+  const settingButtons = { aimHelp: ui.setAim, foulRule: ui.setFoul, size: ui.setSize, allowTop: ui.setTop, noHitFoul: ui.setNoHit };
   for (const name of Object.keys(settingButtons)) bindPageButton(settingButtons[name], () => cycleSetting(name));
 
   /** The title shows the normal buttons (and Resume when a match is kept). Called by main.js each time the title shows. */
@@ -181,7 +182,7 @@ export function createOnline(o) {
   }
   function startMatch() {
     if (role !== 'host' || !st || !st.link || table || opening) return;
-    const opts = { size: settings.size, seed: (Date.now() % 4294967296) >>> 0, mode: 'match', foulRule: settings.foulRule };
+    const opts = { size: settings.size, seed: (Date.now() % 4294967296) >>> 0, mode: 'match', foulRule: settings.foulRule, noHitFoul: settings.noHitFoul };
     net.send(make.start(1, opts, settings));
     openTable({ game: 1, opts, resume: null });
   }

@@ -131,15 +131,20 @@ function has(list, v) {
 /**
  * The foul of the finished shot, or ''. When several happen, the first in this order is named:
  * scratch, cueOffTable, noHit, wrongBall, ballOffTable, noCushion.
+ * The cue ball touching no ball is a foul only when the host's noHitFoul setting is on; when it is off,
+ * such a shot is clean (no cushion is needed either: there was no hit). A scratch or the cue ball leaving
+ * the table stays a foul either way. The 8 first is fine on the break.
  * @param {Object} sh  state.shot
+ * @param {boolean} isBreak    the shot was the break
+ * @param {boolean} noHitFoul  the cue ball touching no ball is a foul
  * @returns {string}
  */
-export function shotFoul(sh) {
+export function shotFoul(sh, isBreak, noHitFoul) {
   if (sh.cuePotted) return 'scratch';
   if (sh.cueOff) return 'cueOffTable';
-  if (sh.firstHit < 0) return 'noHit';
+  if (sh.firstHit < 0) return noHitFoul ? 'noHit' : '';
   const first = kindOf(sh.firstHit);
-  if (sh.target === 'open') { if (first === 'eight') return 'wrongBall'; }
+  if (sh.target === 'open') { if (first === 'eight' && !isBreak) return 'wrongBall'; }
   else if (first !== sh.target) return 'wrongBall';
   if (sh.off.length > 0) return 'ballOffTable';
   if (!sh.cushionAfterHit) return 'noCushion';
@@ -148,8 +153,8 @@ export function shotFoul(sh) {
 
 /**
  * Everything has stopped: judge the shot by the owner's rules, push the match events, set up the next shot.
- * Order: the 8 dropping on the break (rack again); the 8 dropping or leaving the table (win or loss);
- * fouls; groups; who shoots next.
+ * Order: the 8 dropping or leaving the table on the break (rack again); the 8 dropping or leaving the
+ * table later (win or loss); fouls; groups; who shoots next.
  * @param {Object} state @param {{table:Object, physics:Object}} data @param {TableGeometry} geo
  * @param {PhysicsConst} k @param {GameEvent[]} events
  */
@@ -159,9 +164,9 @@ export function judgeShot(state, data, geo, k, events) {
   const wasBreak = state.breakShot;
   const eightDown = has(sh.potted, 8), eightOff = has(sh.off, 8);
 
-  // 1. The 8 dropping on the break: rack again, same breaker. Not a foul, whatever else happened.
-  if (wasBreak && eightDown) {
-    events.push({ type: 'rerack' });
+  // 1. The 8 dropping or leaving the table on the break: rack again, same breaker. Not a foul, whatever else happened.
+  if (wasBreak && (eightDown || eightOff)) {
+    events.push({ type: 'rerack', reason: eightDown ? 'eightDown' : 'eightOffTable' });
     state.balls = makeRack(state, geo, k);
     putCueInHand(state.balls[0]);
     state.turn = state.breaker;
@@ -175,7 +180,7 @@ export function judgeShot(state, data, geo, k, events) {
     return;
   }
 
-  const foul = shotFoul(sh);
+  const foul = shotFoul(sh, wasBreak, state.settings.noHitFoul === true);
 
   // 2. The 8 is gone: the game ends.
   if (eightDown || eightOff) {

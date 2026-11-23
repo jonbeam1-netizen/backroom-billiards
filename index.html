@@ -50,6 +50,11 @@
     background: radial-gradient(circle at 35% 30%, #e8604a, #b52a17 60%, #6e1408); box-shadow: 0 1px 2px rgba(0,0,0,.6); pointer-events: none; }
   #elevText { margin-top: 6px; font-size: 13px; color: var(--ink); text-shadow: 0 1px 2px #000; }
   #elevSlider { width: 100%; margin: 3px 0 0; accent-color: var(--brass); cursor: pointer; }
+  /* the frame round the small view from above (item 32): the picture itself is drawn into the canvas under it.
+     Its place and size are set by view/gameView.js from data/controls.json camera.mini. */
+  #miniFrame { position: absolute; left: 12px; bottom: 52px; width: 0; height: 0; box-sizing: border-box; pointer-events: none;
+    visibility: hidden; opacity: 0; border: 5px solid transparent; border-image: var(--wood-grain) 6; border-radius: 3px;
+    box-shadow: 0 4px 14px rgba(0,0,0,.7), inset 0 0 0 1px rgba(201,162,74,.75), inset 0 0 0 2px rgba(0,0,0,.45), inset 0 0 12px rgba(0,0,0,.45); }
   #hint { position: absolute; left: 0; right: 0; bottom: 12px; text-align: center; font-size: clamp(13px, 1.7vw, 15px);
     color: var(--ink); text-shadow: 0 1px 2px #000, 0 0 6px #000, 0 0 12px #000; padding: 0 12px; }
 
@@ -127,6 +132,8 @@
   .players div.on { border-color: var(--brass-light); box-shadow: 0 0 0 1px var(--brass); }
   .settings { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 0 0 6px; }
   .settings button { min-width: 0; font-size: clamp(13px, 1.7vw, 15px); padding: 8px 18px; }
+  /* an odd plate out at the end spans the whole row, so the grid stays even */
+  .settings button:last-child:nth-child(odd) { grid-column: 1 / -1; }
   #lobbyNote, #lobbyStatus { margin: 6px 0 10px; font-size: clamp(14px, 1.8vw, 16px); }
   #lobbyNote { color: var(--ink-soft); font-style: italic; }
   #lobbyStatus { color: var(--ink); min-height: 1.3em; }
@@ -199,6 +206,7 @@
       <button id="overTitleBtn" type="button">Title</button>
     </div>
   </div>
+  <div id="miniFrame" aria-hidden="true"></div>
   <div id="power"><div id="powerFill"></div></div>
   <div id="fineNote" hidden>Fine aim on (F)</div>
   <div id="hint"></div>
@@ -234,9 +242,11 @@
     <div id="lobbyCode">····</div>
     <div class="players"><div id="lobbyHost">Host</div><div id="lobbyFriend">Friend</div></div>
     <div class="settings">
+      <!-- two short ones, the two foul rules side by side, then the view from above across the whole row -->
       <button id="setAim" type="button">Aim help</button>
-      <button id="setFoul" type="button">After a foul</button>
       <button id="setSize" type="button">Table</button>
+      <button id="setFoul" type="button">After a foul</button>
+      <button id="setNoHit" type="button">Cue ball hits nothing</button>
       <button id="setTop" type="button">View from above</button>
     </div>
     <p id="lobbyNote"></p>

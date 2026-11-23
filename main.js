@@ -114,8 +114,8 @@ let dataPromise = null;
 function loadData() {
   if (!dataPromise) {
     const get = name => fetch(new URL('./data/' + name + '.json', import.meta.url)).then(r => { if (!r.ok) throw new Error(name + '.json: ' + r.status); return r.json(); });
-    dataPromise = Promise.all([get('table'), get('physics'), get('controls'), get('audio'), get('net')])
-      .then(([table, physics, controls, audio, net]) => ({ table, physics, controls, audio, net }));
+    dataPromise = Promise.all([get('table'), get('physics'), get('controls'), get('audio'), get('net'), get('tracks')])
+      .then(([table, physics, controls, audio, net, tracks]) => ({ table, physics, controls, audio, net, tracks }));
   }
   return dataPromise;
 }
@@ -133,7 +133,7 @@ async function openPractice(mode, link) {
   mode = mode === 'match' || mode === 'online' ? mode : 'practice';
   $('note').textContent = '';
   try {
-    const [{ table, physics, controls, audio }, practice] = await Promise.all([loadData(), import('./practice.js')]);
+    const [{ table, physics, controls, audio, tracks }, practice] = await Promise.all([loadData(), import('./practice.js')]);
     loadSounds(audio);   // starts loading the recordings; a muted test run skips this
     if (titleScene) { titleScene.stop(); titleScene = null; }
     $('title').hidden = true; $('stamp').hidden = true; $('scene').hidden = true;
@@ -154,13 +154,15 @@ async function openPractice(mode, link) {
     }
     input.setPaused(settingsScreen.isOpen());
     const opened = practice.startPractice({
-      canvas: gameCanvas, data: { table, physics }, controls, input, look: look(),
+      canvas: gameCanvas, data: { table, physics }, controls, tracks, input, look: look(),
       mode, online: link, foulRule: query.get('foul') === 'line' ? 'behindLine' : 'anywhere',   // the local match: ?foul=line (online: the lobby setting)
+      noHitFoul: query.get('nohit') === 'foul',   // the local match: ?nohit=foul makes the cue ball hitting nothing a foul (online: the lobby setting)
       hud: { matchBar: $('matchBar'), matchMsg: $('matchMsg'), pocketMark: $('pocketMark'), overPanel: $('overPanel'), overText: $('overText'), overWhy: $('overWhy'),
         overWait: $('overWait'), rematchBtn: $('rematchBtn'),
         who: [$('who0'), $('who1')], grp: [$('grp0'), $('grp1')], rackBtn: $('rackBtn'),
         hint: $('hint'), power: $('power'), powerFill: $('powerFill'), aimHelpBtn: $('aimHelpBtn'), viewBtn: $('viewBtn'),
-        spinBox: $('spinBox'), spinPad: $('spinPad'), spinDot: $('spinDot'), elevText: $('elevText'), elevSlider: /** @type {HTMLInputElement} */ ($('elevSlider')) },
+        spinBox: $('spinBox'), spinPad: $('spinPad'), spinDot: $('spinDot'), elevText: $('elevText'), elevSlider: /** @type {HTMLInputElement} */ ($('elevSlider')),
+        miniFrame: $('miniFrame') },
       onExit: () => { if (online) online.tableClosed(); showTitle(); },
     });
     liveTable = opened;
@@ -184,7 +186,7 @@ online = createOnline({
     hostBtn: $('hostBtn'), joinBtn: $('joinBtn'), resumeBtn: $('resumeBtn'),
     joinBox: $('joinBox'), codeBox: $('codeBox'), joinGoBtn: $('joinGoBtn'), joinBackBtn: $('joinBackBtn'),
     lobby: $('lobby'), lobbyCode: $('lobbyCode'), lobbyHost: $('lobbyHost'), lobbyFriend: $('lobbyFriend'),
-    setAim: $('setAim'), setFoul: $('setFoul'), setSize: $('setSize'), setTop: $('setTop'),
+    setAim: $('setAim'), setFoul: $('setFoul'), setSize: $('setSize'), setTop: $('setTop'), setNoHit: $('setNoHit'),
     lobbyNote: $('lobbyNote'), lobbyStatus: $('lobbyStatus'), startBtn: $('startBtn'), leaveBtn: $('leaveBtn'),
   },
   openTable: link => openPractice('online', link),

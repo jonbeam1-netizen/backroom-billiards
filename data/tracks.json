@@ -1,0 +1,16 @@
+{
+  "_about": "Tracks on the felt that come from play (item 36): a faint pale track where the cue ball started on a hard shot, like the pale burn a real cloth gets. Drawing only: the rules never see them. Worked out from the shot itself (where the cue ball was, which way it went, how fast), so both players online get the same tracks. Wiped on every re-rack and new game. Metres and metres a second.",
+  "minSpeed": 6.5,
+  "_aboutMinSpeed": "Only a shot at least this fast leaves a track (the hardest shot is 10, physics.json shot.maxShotSpeed). 6.5 is about the top quarter of the power bar; a full-power break always leaves one.",
+  "fullSpeed": 10,
+  "length": [0.05, 0.13],
+  "_aboutLength": "How long the track is: the first number at minSpeed, the second at fullSpeed, in between evenly.",
+  "strength": [0.18, 0.4],
+  "_aboutStrength": "How pale it is at its strongest point, as a share of the way from the cloth's colour to markColour: the first number at minSpeed, the second at fullSpeed. Tracks in the same place add up, but never past 1.",
+  "width": 0.0024,
+  "_aboutWidth": "Half the width of the track's bright core (metres). A soft halo 2.5 times as wide, a fifth as strong, goes round it. The track is broken up by fine lines along it and a speckle, like flattened cloth fibres.",
+  "markColour": [0.36, 0.38, 0.38],
+  "_aboutMarkColour": "The colour a track pales the cloth toward (linear light, 0 to 1): a light grey, so it reads right on green, blue and red felt.",
+  "texelsAcross": 1024,
+  "_aboutTexels": "The size of the picture the tracks are drawn into: this many pixels across the table, twice as many along it (about 1.4 mm a pixel on the 9-foot table)."
+}

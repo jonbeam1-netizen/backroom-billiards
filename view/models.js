@@ -220,11 +220,33 @@ function outsideArc(cx, cz, r, bx, bz) {
 // ---------------------------------------------------------------- the table
 
 /**
+ * Teach the bed's cloth the tracks from play (item 36): a one-channel picture laid over the bed with the same
+ * layout as the cloth's colour picture. Where it is bright, the cloth's colour is paled toward markColour before
+ * the light falls on it, so a track takes the lamp light, the ball shadows and the weave like the cloth round it.
+ * @param {THREE.Material} felt
+ * @param {{uniforms:{feltMarks:{value:THREE.Texture}, feltMarkColour:{value:THREE.Color}}}} marks
+ */
+function patchFeltMarks(felt, marks) {
+  const before = felt.onBeforeCompile, key = felt.customProgramCacheKey();
+  felt.onBeforeCompile = (shader, r) => {
+    before.call(felt, shader, r);
+    shader.uniforms.feltMarks = marks.uniforms.feltMarks;
+    shader.uniforms.feltMarkColour = marks.uniforms.feltMarkColour;
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', '#include <common>\nuniform sampler2D feltMarks;\nuniform vec3 feltMarkColour;')
+      .replace('#include <map_fragment>', '#include <map_fragment>\n\tdiffuseColor.rgb = mix( diffuseColor.rgb, feltMarkColour, texture2D( feltMarks, vMapUv ).r );');
+  };
+  felt.customProgramCacheKey = () => key + 'M';
+  felt.needsUpdate = true;
+}
+
+/**
  * The whole table.
  * @param {import('../rules/types.js').TableGeometry} geom
  * @param {Object} table   data/table.json
  * @param {number} feltColour
- * @param {{quality?: Quality, occlusion?: ReturnType<import('./occlusion.js').createOcclusion>}} [opts]
+ * @param {{quality?: Quality, occlusion?: ReturnType<import('./occlusion.js').createOcclusion>, marks?: Object}} [opts]
+ *        marks: the tracks from play (see patchFeltMarks); the title screen has none
  * @returns {{group: THREE.Group, feltMaterials: THREE.Material[], dispose: () => void}}
  */
 export function buildTableModel(geom, table, feltColour, opts = {}) {
@@ -262,6 +284,7 @@ export function buildTableModel(geom, table, feltColour, opts = {}) {
     occ.patch(felt, { balls: true, cue: true, ambient: true });
     occ.patch(cushionFelt, { balls: true, cue: true, ambient: true });
   }
+  if (opts.marks) patchFeltMarks(felt, opts.marks);
   const Wood = q.physical ? THREE.MeshPhysicalMaterial : THREE.MeshStandardMaterial;
   const wood = keep(new Wood({ map: railWood, roughness: q.physical ? 0.6 : 0.45, metalness: 0, envMapIntensity: 0.35, ...(q.physical ? { clearcoat: 0.6, clearcoatRoughness: 0.12 } : {}) }));
   if (occ) occ.patch(wood, { balls: true, cue: true, ambient: true });

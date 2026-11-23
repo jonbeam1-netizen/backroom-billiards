@@ -31,7 +31,7 @@ export function makeBall(id, x, y, z) {
  * Match (opts.mode 'match'): the extra MatchState fields; the breaker (opts.breaker, or a coin flip from the
  * seeded generator, drawn after the rack) has the cue ball in hand behind the line.
  * @param {{table:Object, physics:Object}} data
- * @param {{size?:string, seed?:number, mode?:'practice'|'match', foulRule?:'anywhere'|'behindLine', breaker?:number}} opts
+ * @param {{size?:string, seed?:number, mode?:'practice'|'match', foulRule?:'anywhere'|'behindLine', noHitFoul?:boolean, breaker?:number}} opts
  * @returns {GameState}
  */
 export function createGame(data, opts) {
@@ -53,12 +53,12 @@ export function createGame(data, opts) {
 /**
  * The extra fields of a match, and the cue ball in hand for the breaker.
  * @param {Object} state  a fresh GameState (mutated into a MatchState)
- * @param {{foulRule?:string, breaker?:number}} o
+ * @param {{foulRule?:string, noHitFoul?:boolean, breaker?:number}} o
  */
 function setUpMatch(state, o) {
   const s = /** @type {any} */ (state);
   s.mode = 'match';
-  s.settings = { foulRule: o.foulRule === 'behindLine' ? 'behindLine' : 'anywhere' };
+  s.settings = { foulRule: o.foulRule === 'behindLine' ? 'behindLine' : 'anywhere', noHitFoul: o.noHitFoul === true };
   let breaker = 0;
   if (o.breaker === 0 || o.breaker === 1) breaker = o.breaker;
   else breaker = random(state) < 0.5 ? 0 : 1;

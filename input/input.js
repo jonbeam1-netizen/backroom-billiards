@@ -22,6 +22,13 @@
 // - Settings: aim sensitivity multiplies every turning rate (setAimSpeed); fine aim can be kept on without Shift
 //   (setFineAim, or the F key at the table). While the settings are open over the table, setPaused(true) makes
 //   the table take nothing.
+// - Peek (item 34): while the spacebar is held at the table, the frame says `peek` (the view lifts the camera a
+//   little). At the table the spacebar never reaches the page: it cannot click a button that has focus or scroll.
+// - Look around (item 33): while setLook(true) (the balls roll and the view is behind the ball), moving the mouse
+//   gives `lookDelta`, a turn of the view only; it never changes the aim, the power or the shot. In a normal browser
+//   the mouse is captured for it (a click on the table captures it again if the browser asked for one); where the
+//   browser refuses, the free cursor works like the aiming stick, but only after it has been moved, so the view
+//   never turns by itself.
 
 /** True while the player is typing in a text field: the table's keys must not react then. @param {Event} e */
 function typing(e) {
@@ -99,6 +106,10 @@ export function bindTextField(el, o) {
  * @property {number|null} elevSet the cue angle was set on the slider, degrees
  * @property {number} elevDelta    raise the butt of the cue by this many degrees (negative lowers)
  * @property {string[]} pressed    names of buttons pressed this frame (bindButton, and keys with a name)
+ * @property {boolean} peek        the spacebar is held at the table (lift the camera a little)
+ * @property {number} lookDelta    while looking around: turn the view by this much, radians (positive = right); never the aim
+ * @property {boolean} looking     looking around is on (setLook)
+ * @property {boolean} lookCaptured  and the mouse is captured for it (else the free cursor works as a stick)
  */
 
 /**
@@ -137,16 +148,43 @@ export function createInput(target, controls) {
   let elevSet = null;
   let spinUp = false, spinDown = false, spinLeft = false, spinRight = false;
 
+  // peek and look around
+  let tableOn = false;         // the table is open (setTable): the spacebar belongs to the game
+  let peek = false;            // the spacebar is held
+  let look = false;            // looking around while the balls roll (setLook)
+  let lookPx = 0;              // captured mouse: sideways movement since the last poll, pixels
+  let lookCurX = -1;           // free cursor: where it is over the table, or -1
+  let lookFromX = -1, lookFromY = -1, lookArmed = false;   // free cursor: it turns only after moving armPixels
+  let lookRefused = false;     // the browser would not capture the mouse for looking, this roll
+  /** What the last capture request was for: a refusal while looking must not switch the aiming to the free cursor. */
+  let lockFor = '';
+  const lookCfg = controls.camera.look || { radPerPixel: 0.0022, stickRadPerSec: 2.4, armPixels: 6 };
+
   const captured = () => document.pointerLockElement === target;
   const aimOn = () => wanted && (mode === 'point' || (mode === 'aim' && (captured() || free)));
 
   function capture() {
     if (captured()) return;
+    lockFor = 'aim';
     if (!target.requestPointerLock) { free = true; return; }
-    try { const p = target.requestPointerLock(); if (p && p.catch) p.catch(() => { free = true; }); } catch (e) { free = true; }
+    try { const p = target.requestPointerLock(); if (p && p.catch) p.catch(() => { if (lockFor === 'aim') free = true; }); } catch (e) { free = true; }
     setTimeout(() => { if (!captured() && wanted && mode === 'aim') free = true; }, 250);
   }
+  /** Capture the mouse for looking around, where the browser allows it. A refusal leaves the free cursor for this roll. */
+  function captureLook() {
+    if (captured() || free || lookRefused || !target.requestPointerLock) return;
+    lockFor = 'look';
+    try { const p = target.requestPointerLock(); if (p && p.catch) p.catch(() => { if (lockFor === 'look') lookRefused = true; }); } catch (e) { lookRefused = true; }
+  }
   function uncapture() { if (captured() && document.exitPointerLock) document.exitPointerLock(); }
+  /** @param {boolean} on */
+  function setLook(on) {
+    on = !!on && !paused && tableOn;
+    if (on === look) return;
+    look = on; lookPx = 0; lookCurX = -1; lookFromX = -1; lookFromY = -1; lookArmed = false; lookRefused = false;
+    if (on) captureLook();
+    else if (captured() && lockFor === 'look') uncapture();
+  }
   function dropHold() { holding = false; pullPx = 0; }
   /**
    * How fast the aim turns, after the aim sensitivity and fine aim (Shift held, or kept on in the settings).
@@ -167,14 +205,16 @@ export function createInput(target, controls) {
     if (mode === 'aim') { if (wanted) capture(); } else uncapture();
   }
 
-  document.addEventListener('pointerlockerror', () => { free = true; });
+  document.addEventListener('pointerlockerror', () => { if (lockFor === 'look') lookRefused = true; else free = true; });
   document.addEventListener('pointerlockchange', () => {
     if (captured()) free = false;
     else if (mode === 'aim' && !free) wanted = false;   // the mouse was freed with Esc: aiming is off
   });
-  target.addEventListener('mouseleave', () => { pointerX = -1; pointerY = -1; });
+  target.addEventListener('mouseleave', () => { pointerX = -1; pointerY = -1; lookCurX = -1; });
 
   target.addEventListener('mousedown', e => {
+    // looking around: a left click on the table captures the mouse again (the browser wants a click for that)
+    if (look && e.button === 0 && !captured()) { lookRefused = false; captureLook(); }
     if (mode === 'off' || mode === 'watch') return;
     if (e.button === 0) {
       // one left click on the table shoots, and only from the power state; it does nothing else
@@ -202,6 +242,17 @@ export function createInput(target, controls) {
     elevDelta += (e.deltaY < 0 ? 1 : -1) * controls.cue.wheelStepDeg;   // wheel up raises the butt of the cue
   }, { passive: false });
   window.addEventListener('mousemove', e => {
+    if (look) {
+      // looking around: the captured mouse turns the view by its movement; the free cursor works as a stick
+      // once it has been moved a little (see poll)
+      if (captured()) lookPx += e.movementX || 0;
+      else if (e.target === target) {
+        const r = target.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top;
+        if (lookFromX < 0) { lookFromX = x; lookFromY = y; }
+        else if (!lookArmed && Math.hypot(x - lookFromX, y - lookFromY) >= lookCfg.armPixels) lookArmed = true;
+        lookCurX = x;
+      } else lookCurX = -1;
+    }
     if (mode === 'off' || mode === 'watch') return;
     const dx = e.movementX || 0, dy = e.movementY || 0;
     if (!captured() && e.target === target) {
@@ -216,6 +267,8 @@ export function createInput(target, controls) {
   target.addEventListener('contextmenu', e => e.preventDefault());
   window.addEventListener('keydown', e => {
     if (typing(e)) return;
+    // the spacebar at the table is the peek, and nothing else: it must not click a page button or scroll the page
+    if (e.key === ' ' && tableOn && !paused) { e.preventDefault(); peek = true; return; }
     if (e.key === 'Shift') fine = true;
     else if (e.key === 'ArrowLeft') left = true;
     else if (e.key === 'ArrowRight') right = true;
@@ -231,7 +284,9 @@ export function createInput(target, controls) {
     else if (!e.repeat && keyNames[e.key] && mode !== 'off') pressed.push(keyNames[e.key]);
   });
   window.addEventListener('keyup', e => {
-    if (e.key === 'Shift') fine = false;
+    // a button that has focus is clicked when the spacebar comes up: stop that too
+    if (e.key === ' ') { if (peek || (tableOn && !paused)) e.preventDefault(); peek = false; }
+    else if (e.key === 'Shift') fine = false;
     else if (e.key === 'ArrowLeft') left = false;
     else if (e.key === 'ArrowRight') right = false;
     else if (e.key === 'w' || e.key === 'W') spinUp = false;
@@ -240,7 +295,7 @@ export function createInput(target, controls) {
     else if (e.key === 'd' || e.key === 'D') spinRight = false;
   });
   window.addEventListener('blur', () => {
-    dropHold(); fine = false; left = false; right = false;
+    dropHold(); fine = false; left = false; right = false; peek = false;
     spinUp = spinDown = spinLeft = spinRight = false;
   });
 
@@ -262,9 +317,23 @@ export function createInput(target, controls) {
     setPaused(on) {
       if (on === paused) return;
       paused = on;
-      if (on) { wanted = false; pullPx = 0; uncapture(); }
+      if (on) { wanted = false; pullPx = 0; peek = false; setLook(false); uncapture(); }
       applyMode();
     },
+    /**
+     * The table is open (true) or closed (false). While it is open the spacebar is the peek.
+     * @param {boolean} on
+     */
+    setTable(on) {
+      tableOn = !!on;
+      if (!tableOn) { peek = false; setLook(false); }
+    },
+    /**
+     * Looking around: on while the balls roll and the view is behind the ball. The mouse then turns the view only.
+     * Turning it off lets go of a mouse captured for it.
+     * @param {boolean} on
+     */
+    setLook(on) { setLook(on); },
     /** Aim sensitivity: a multiplier on every turning rate (captured mouse, free-cursor stick, arrow keys). @param {number} k */
     setAimSpeed(k) { aimSpeed = Number.isFinite(k) && k > 0 ? k : 1; },
     /** Fine aim kept on without holding Shift. @param {boolean} on */
@@ -339,12 +408,24 @@ export function createInput(target, controls) {
           }
         }
       }
+      // looking around: a turn of the view only (aim sensitivity applies, fine aim does not)
+      let lookDelta = 0;
+      if (look) {
+        lookDelta += lookPx * lookCfg.radPerPixel * aimSpeed;
+        if (!captured() && lookArmed && lookCurX >= 0) {
+          const half = (target.clientWidth || 2) / 2, dead = controls.aim.centerDeadShare;
+          const n = Math.max(-1, Math.min(1, (lookCurX - half) / half)), size = Math.abs(n);
+          if (size > dead) lookDelta += (n < 0 ? -1 : 1) * Math.pow((size - dead) / (1 - dead), controls.aim.centerCurve) * lookCfg.stickRadPerSec * dt * aimSpeed;
+        }
+      }
+      lookPx = 0;
       const f = {
         aimDelta: aim, pull: pullPx / controls.power.pullPixels, holding, shoot,
         aiming: aimOn(), free: stick, pointing: mode === 'point' && wanted,
         power: (mode === 'aim' || mode === 'point') && !wanted,
         pointerX, pointerY, confirm, pressed, tap,
         spinSet, spinDX, spinDY, elevSet, elevDelta,
+        peek: peek && tableOn && !paused, lookDelta, looking: look, lookCaptured: look && captured(),
       };
       aim = 0; shoot = null; confirm = false; pressed = []; tap = null;
       spinSet = null; spinDX = 0; spinDY = 0; elevSet = null; elevDelta = 0;

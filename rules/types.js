@@ -97,13 +97,22 @@
 // Jon's rules (HANDOFF.md, Decisions, 2026-11-22 and 2026-11-23):
 // - Coin flip for the first break (from the seed); on a rematch the winner breaks.
 // - The breaker puts the cue ball down anywhere behind the line, then breaks.
-// - The 8 dropping on the break: rack again, the same player breaks again. Not a win or a loss.
+// - The 8 dropping on the break, or leaving the table on the break: rack again, the same player breaks
+//   again. Not a win or a loss, and not a foul. (Changed 2026-11-23, HANDOFF item 29: the 8 leaving the
+//   table on the break used to lose.)
 // - The table stays open after the break. Your group is the first ball you sink, without a foul,
 //   on a shot after the break.
-// - Fouls: the cue ball drops in a pocket or leaves the table; the cue ball touches no ball; the first
-//   ball the cue ball touches is not one of yours (open table: any ball but the 8 is fine; once you are
-//   on the 8, the 8 must be first); after the cue ball's first touch no ball reaches a cushion and no
-//   ball drops; any ball leaves the table.
+// - Fouls: the cue ball drops in a pocket or leaves the table; the cue ball touches no ball (only when
+//   the host's noHitFoul setting is on, see below); the first ball the cue ball touches is not one of
+//   yours (open table: any ball but the 8 is fine; on the break the 8 is fine too; once you are on the 8,
+//   the 8 must be first); after the cue ball's first touch no ball reaches a cushion and no ball drops;
+//   any ball leaves the table.
+// - The cue ball touching no ball (HANDOFF item 31, host setting noHitFoul, default false):
+//   off: not a foul. The turn passes to the other player, the cue ball stays where it stopped, no cue
+//   ball in hand; the "a ball must reach a cushion" foul does not apply (there was no hit). If the cue
+//   ball drops or leaves the table on that shot, it is still a foul (scratch / cueOffTable).
+//   On: a foul, the other player has the cue ball in hand.
+// - Hitting the 8 first on the break is not a foul (HANDOFF item 30). Later, on an open table, it is.
 // - After a foul the other player has the cue ball in hand: anywhere on the table, or only behind the
 //   line, as the foulRule setting says.
 // - You keep shooting while you sink a ball of your own without a foul (on an open table: any ball but
@@ -112,13 +121,15 @@
 // - The 8: you may only shoot at it once your group is gone, and you must call a pocket first.
 //   You win by sinking it in the called pocket without a foul. You lose by: sinking it before your
 //   group is gone; sinking it in another pocket than the called one; sinking it on a shot that is a
-//   foul (for example the cue ball drops too); the 8 leaving the table. If you foul on the 8 shot and
+//   foul (for example the cue ball drops too); the 8 leaving the table (except on the break). If you foul on the 8 shot and
 //   the 8 stays up, it is only a foul.
 
 /**
  * The host's choices for a match.
  * @typedef {Object} MatchSettings
  * @property {'anywhere'|'behindLine'} foulRule   where the cue ball may be put after a foul
+ * @property {boolean} noHitFoul   the cue ball touching no ball is a foul (default false). A state kept
+ *           from before this setting existed may lack it: missing counts as false (also in the hash).
  */
 
 /**
@@ -144,7 +155,8 @@
 
 /**
  * createGame options for a match:
- *   { size, seed, mode: 'match', foulRule: 'anywhere'|'behindLine', breaker?: 0|1 }
+ *   { size, seed, mode: 'match', foulRule: 'anywhere'|'behindLine', noHitFoul?: boolean, breaker?: 0|1 }
+ * noHitFoul is false unless it is exactly true.
  * Without `breaker` the first break is a coin flip from the seed.
  *
  * Extra action in a match:
@@ -159,7 +171,8 @@
  *   'foul'      { player, reason }             reason as in lastFoul
  *   'turn'      { player }                     it is now this player's shot (also sent when the same player goes on)
  *   'groups'    { player, group }              this player now has 'solid' or 'stripe' (the other has the other)
- *   'rerack'    {}                             the 8 dropped on the break; the balls are racked again
+ *   'rerack'    { reason }                     the 8 dropped ('eightDown') or left the table ('eightOffTable')
+ *                                              on the break; the balls are racked again
  *   'gameOver'  { winner, reason }             reason as in overReason
  * These come in the same tick as 'settled'.
  *

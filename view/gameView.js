@@ -1,6 +1,7 @@
 // Draws the table, the balls, the cue and the aim help. It reads the game state and never changes it.
 import * as THREE from '../lib/three.module.min.js';
 import { createStage } from './stage.js';
+import { createTracks } from './tracks.js';
 
 /**
  * What the view is told each frame.
@@ -19,6 +20,8 @@ import { createStage } from './stage.js';
  * @property {'short'|'full'|'none'} aimHelp
  * @property {import('../rules/types.js').Contact|null} contact
  * @property {{x:number, z:number, ok:boolean}|null} ghost   the cue ball in hand
+ * @property {boolean} [peek]        the spacebar is held: lift the camera a little (view behind the ball only)
+ * @property {number} [lookDelta]    turn the view in place by this much (radians, positive = right) while the balls roll
  */
 
 /** A flat strip on the felt between two points. */
@@ -49,7 +52,8 @@ function clipLength(x, z, dx, dz, hw, hl, maxLen) {
  * @param {import('../rules/types.js').TableGeometry} geom
  * @param {{table:Object, physics:Object}} data
  * @param {Object} controls   data/controls.json
- * @param {{quality?:'low'|'medium'|'high', felt?:'green'|'blue'|'red'}} [opts]
+ * @param {{quality?:'low'|'medium'|'high', felt?:'green'|'blue'|'red', tracks?:Object, miniFrame?:HTMLElement|null}} [opts]
+ *        tracks: data/tracks.json (the tracks from play on the felt). miniFrame: the frame round the small view from above.
  */
 export function createGameView(canvas, geom, data, controls, opts = {}) {
   const R = data.table.ball.radius, cam = controls.camera, T = data.table;
@@ -57,7 +61,8 @@ export function createGameView(canvas, geom, data, controls, opts = {}) {
   const depth = T.cushion.depth, hN = T.cushion.noseHeight, hT = T.cushion.railTopHeight;
   const cueLen = controls.cue.length;
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
-  const stage = createStage(renderer, geom, T, { cueLength: cueLen, quality: opts.quality || 'high', felt: opts.felt || 'green' });
+  const tracks = createTracks(geom, opts.tracks);
+  const stage = createStage(renderer, geom, T, { cueLength: cueLen, quality: opts.quality || 'high', felt: opts.felt || 'green', marks: tracks });
   const scene = stage.scene, occ = stage.occ;
 
   // aim help
@@ -85,11 +90,101 @@ export function createGameView(canvas, geom, data, controls, opts = {}) {
   const drops = new Map();
   const qTmp = new THREE.Quaternion(), vTmp = new THREE.Vector3();
 
+  // the view behind the ball: where the camera glides to (camBase), then turned in place while the balls roll
+  // (look around, item 33) and lifted a little while the spacebar is held (peek, item 34)
+  const camBase = new THREE.Vector3(), lookAt = new THREE.Vector3();
+  const peekCfg = cam.peek || { rise: 0, over: 0, lookAhead: 0, seconds: 0.3 };
+  let lookYaw = 0;                       // how far the view is turned from the aim, radians (positive = right)
+  let peekX = 0, peekV = 0;              // how far into the peek (0 to 1) and how fast it is moving
+
+  // ---------------------------------------------------------------- the small view from above (item 32)
+  // A second camera draws the table from above into a small picture (a render target), which is then laid over
+  // the bottom-left corner of the screen with a fade. Only while the balls roll and the main view is behind the ball.
+  const mc = cam.mini || { share: 0.22, minWidth: 120, maxWidth: 300, maxHeightShare: 0.3, left: 12, bottom: 52, frame: 5, tableMargin: 0.03, fadeIn: 0.15, fadeOut: 0.25 };
+  const frameEl = opts.miniFrame || null;
+  const miniCam = new THREE.PerspectiveCamera(cam.topFov, 2, 0.05, 30);
+  const mini = { x: 0, y: 0, w: 0, h: 0, wide: true };   // where it is drawn, CSS pixels from the canvas's bottom left
+  /** @type {THREE.WebGLRenderTarget|null} */
+  let miniRT = null;
+  let miniFade = 0, miniShown = -1, miniWarm = false;
+  let miniBlocked = false;               // test only: keep the small view away (to measure what it costs)
+  const quadCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+  const quadScene = new THREE.Scene();
+  const quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.MeshBasicMaterial({ transparent: true, depthTest: false, depthWrite: false }));
+  quadScene.add(quad);
+
+  /** Where the small view goes and how big it is, for this window size. */
+  function layoutMini(W, H) {
+    const along = 2 * (oz + mc.tableMargin), across = 2 * (ox + mc.tableMargin), ratio = along / across;
+    const wide = W >= H;                            // like the main view from above: a wide window lays the table on its side
+    // never wider than the room left of the power bar (which sits in the middle at the bottom)
+    const powerHalf = Math.min(0.28 * W, 170) + 3;
+    const room = Math.max(mc.minWidth, W / 2 - powerHalf - 2 * mc.left);
+    let w, h;
+    if (wide) {
+      w = Math.max(mc.minWidth, Math.min(mc.maxWidth, W * mc.share, room));
+      h = w / ratio;
+      if (h > H * mc.maxHeightShare) { h = H * mc.maxHeightShare; w = h * ratio; }
+    } else {
+      h = Math.max(mc.minWidth, Math.min(mc.maxWidth, H * mc.share));
+      w = h / ratio;
+      if (w > room) { w = room; h = w * ratio; }
+      if (h > H * mc.maxHeightShare) { h = H * mc.maxHeightShare; w = h / ratio; }
+    }
+    w = Math.floor(w); h = Math.floor(h);
+    const b = mc.frame;
+    mini.x = mc.left + b; mini.y = mc.bottom + b; mini.w = w; mini.h = h; mini.wide = wide;
+    if (frameEl) {
+      const s = frameEl.style;
+      s.left = mc.left + 'px'; s.bottom = mc.bottom + 'px'; s.width = (w + 2 * b) + 'px'; s.height = (h + 2 * b) + 'px'; s.borderWidth = b + 'px';
+    }
+    const pr = renderer.getPixelRatio(), rw = Math.max(1, Math.round(w * pr)), rh = Math.max(1, Math.round(h * pr));
+    if (!miniRT) {
+      miniRT = new THREE.WebGLRenderTarget(rw, rh, { type: THREE.HalfFloatType, samples: 4 });
+      quad.material.map = miniRT.texture; quad.material.needsUpdate = true;
+    } else if (miniRT.width !== rw || miniRT.height !== rh) miniRT.setSize(rw, rh);
+    // the camera straight above the middle, high enough that the whole table fits
+    miniCam.aspect = w / h;
+    const t = Math.tan((cam.topFov * Math.PI / 180) / 2), a = miniCam.aspect;
+    const alongM = oz + mc.tableMargin, acrossM = ox + mc.tableMargin;
+    const ht = wide ? Math.max(acrossM / t, alongM / (t * a)) : Math.max(alongM / t, acrossM / (t * a));
+    miniCam.position.set(0, ht, 0);
+    miniCam.up.set(wide ? -1 : 0, 0, wide ? 0 : -1);
+    miniCam.lookAt(0, 0, 0);
+    miniCam.far = ht + 2; miniCam.near = Math.max(0.05, ht - 1.5);
+    miniCam.updateProjectionMatrix();
+    miniCam.updateMatrixWorld();
+  }
+
+  /** Draw the table from above into the small picture. */
+  function drawMiniPicture() {
+    occ.uniforms.occInvView.value = miniCam.matrixWorld;   // the soft shadows find the lamps through the camera drawing
+    renderer.setRenderTarget(miniRT);
+    renderer.render(scene, miniCam);
+    renderer.setRenderTarget(null);
+    occ.uniforms.occInvView.value = camera.matrixWorld;
+  }
+  /** Lay the small picture over its corner, this much faded in (0 to 1). */
+  function drawMiniOverlay(alpha) {
+    quad.material.opacity = alpha;
+    const auto = renderer.autoClear, size = renderer.getSize(vTmp2);
+    renderer.autoClear = false;
+    renderer.setViewport(mini.x, mini.y, mini.w, mini.h);
+    renderer.setScissor(mini.x, mini.y, mini.w, mini.h);
+    renderer.setScissorTest(true);
+    renderer.render(quadScene, quadCam);
+    renderer.setScissorTest(false);
+    renderer.setViewport(0, 0, size.x, size.y);
+    renderer.autoClear = auto;
+  }
+  const vTmp2 = new THREE.Vector2();
+
   function resize() {
     const w = canvas.clientWidth || 1, h = canvas.clientHeight || 1;
     renderer.setSize(w, h, false);
     camera.aspect = w / h;
     camera.updateProjectionMatrix();
+    layoutMini(w, h);
   }
   window.addEventListener('resize', resize);
   resize();
@@ -238,12 +333,26 @@ export function createGameView(canvas, geom, data, controls, opts = {}) {
     /** @param {'green'|'blue'|'red'} name */
     setFelt(name) { stage.setFelt(name); },
     /** Picture quality. @param {'low'|'medium'|'high'} name */
-    setQuality(name) { stage.setQuality(name); resize(); },
+    setQuality(name) { stage.setQuality(name); miniWarm = false; resize(); },
     snapCamera() { snap = true; },
-    /** What happened in a tick of the rules (for the drop into a pocket). @param {import('../rules/types.js').GameEvent[]} events */
-    onEvents(events) {
-      for (const e of events) if (e.type === 'pocket' && e.ball >= 0 && e.ball < 16) startDrop(e);
+    /**
+     * What happened in a tick of the rules: a ball dropping into a pocket, and the track a hard shot leaves on the felt.
+     * @param {import('../rules/types.js').GameEvent[]} events
+     * @param {{dirX:number, dirZ:number}|null} [shot]   the shoot action applied in this tick (its direction), if any
+     */
+    onEvents(events, shot) {
+      for (const e of events) {
+        if (e.type === 'pocket' && e.ball >= 0 && e.ball < 16) startDrop(e);
+        else if (e.type === 'cueStrike' && shot && e.ball === 0) tracks.add(e.x, e.z, shot.dirX, shot.dirZ, e.speed || 0);
+        else if (e.type === 'rerack') tracks.clear();
+      }
     },
+    /** A new rack or a new game: clean felt. */
+    clearTracks() { tracks.clear(); },
+    /** Test only: true keeps the small view from above away (to measure what it costs). */
+    blockMini(on) { miniBlocked = !!on; },
+    /** Test only: a fingerprint of the tracks on the felt (two PCs online must match). */
+    tracksPrint() { return tracks.fingerprint(); },
     /** Test only: look from a fixed place. A name (pocket, pocketTop, side, sideTop, rack, cushion, low, under, cueSide, ballN) or [x, y, z, lookX, lookY, lookZ, fov]; null for the game cameras. */
     setDebugCamera(spec) { debugCam = spec || null; snap = true; },
     /**
@@ -340,6 +449,7 @@ export function createGameView(canvas, geom, data, controls, opts = {}) {
         if (camera.fov !== cam.aimFov) { camera.fov = cam.aimFov; camera.updateProjectionMatrix(); }
         camera.up.set(0, 1, 0);
         // the camera only moves while there is something to aim; during the roll it stays where it was
+        // (it may be turned in place by the player, and lifted by the peek, below)
         if (aiming || snap) {
           const bx = cb.where === 'table' ? cbm.position.x : 0, bz = cb.where === 'table' ? cbm.position.z : geom.lineZ;
           // with the butt of the cue raised (or lifted over a rail), the camera rises too, so you look down over the cue and not into it
@@ -350,21 +460,75 @@ export function createGameView(canvas, geom, data, controls, opts = {}) {
           wantLook.set(bx + f.dirX * cam.aimLookAhead, 0, bz + f.dirZ * cam.aimLookAhead);
         }
         const k = snap ? 1 : 1 - Math.exp(-f.dt * cam.follow);
-        camera.position.lerp(wantPos, k);
+        camBase.lerp(wantPos, k);
         look.lerp(wantLook, k);
-        camera.lookAt(look);
+        // look around (item 33): while the balls roll the mouse turns the view in place; afterwards it glides back
+        // to the aim at the same speed as the camera glides back behind the cue ball. Never touches the aim itself.
+        if (snap) lookYaw = 0;
+        else if (st.phase === 'rolling') lookYaw += f.lookDelta || 0;
+        else lookYaw *= 1 - k;
+        lookYaw -= Math.round(lookYaw / (2 * Math.PI)) * 2 * Math.PI;
+        const fx = look.x - camBase.x, fz = look.z - camBase.z, c = Math.cos(lookYaw), s = Math.sin(lookYaw);
+        const rx = fx * c - fz * s, rz = fx * s + fz * c, rl = Math.hypot(rx, rz) || 1, ux = rx / rl, uz = rz / rl;
+        // peek (item 34): up and a little over toward where the view looks, eased in and out
+        const e = Math.max(0, Math.min(1, peekX));
+        camera.position.set(camBase.x + ux * peekCfg.over * e, camBase.y + peekCfg.rise * e, camBase.z + uz * peekCfg.over * e);
+        lookAt.set(camBase.x + rx + ux * peekCfg.lookAhead * e, look.y, camBase.z + rz + uz * peekCfg.lookAhead * e);
+        camera.lookAt(lookAt);
       }
       snap = false;
 
+      // the peek eases toward held (1) or let go (0) like a critically damped spring: smooth both ways, no snap,
+      // and letting go halfway turns it round without a jolt
+      {
+        const target = f.peek && mode === 'aim' && !debugCam ? 1 : 0;
+        if (mode !== 'aim') { peekX = 0; peekV = 0; }
+        else {
+          const w = 4.74 / Math.max(0.05, peekCfg.seconds || 0.3);   // about 95 % of the way after `seconds`
+          const x0 = peekX - target, ex = Math.exp(-w * f.dt), b = peekV + w * x0;
+          peekX = target + (x0 + b * f.dt) * ex;
+          peekV = (peekV - w * b * f.dt) * ex;
+          if (Math.abs(peekX - target) < 1e-4 && Math.abs(peekV) < 1e-3) { peekX = target; peekV = 0; }
+        }
+      }
+
       renderer.render(scene, camera);
+
+      // the small view from above: only while the balls roll and the main view is behind the ball
+      const wantMini = mode === 'aim' && !debugCam && st.phase === 'rolling' && mini.w > 0 && !miniBlocked;
+      miniFade = wantMini ? Math.min(1, miniFade + f.dt / Math.max(0.01, mc.fadeIn)) : Math.max(0, miniFade - f.dt / Math.max(0.01, mc.fadeOut));
+      if (!miniWarm && frames >= 2) { drawMiniPicture(); miniWarm = true; }   // build its shaders now, not on the first shot
+      if (miniFade > 0) {
+        const a = miniFade * miniFade * (3 - 2 * miniFade);
+        drawMiniPicture();
+        drawMiniOverlay(a);
+      }
+      if (frameEl) {
+        const shown = Math.round(miniFade * 100) / 100;
+        if (shown !== miniShown) {
+          miniShown = shown;
+          frameEl.style.opacity = String(shown * shown * (3 - 2 * shown));
+          frameEl.style.visibility = shown > 0 ? 'visible' : 'hidden';
+        }
+      }
       frames++;
     },
 
     info() {
       return { quality: stage.quality, felt: stage.felt, frames, mode, size: [canvas.clientWidth, canvas.clientHeight], pixelRatio: renderer.getPixelRatio(),
         calls: renderer.info.render.calls, triangles: renderer.info.render.triangles, programs: renderer.info.programs ? renderer.info.programs.length : 0,
-        textures: renderer.info.memory.textures, geometries: renderer.info.memory.geometries };
+        textures: renderer.info.memory.textures, geometries: renderer.info.memory.geometries,
+        mini: { fade: miniFade, rect: [mini.x, mini.y, mini.w, mini.h], wide: mini.wide, target: miniRT ? [miniRT.width, miniRT.height] : null },
+        peek: peekX, lookDeg: lookYaw * 180 / Math.PI, tracks: tracks.count(),
+        camera: [camera.position.x, camera.position.y, camera.position.z] };
     },
-    dispose() { window.removeEventListener('resize', resize); stage.dispose(); renderer.dispose(); },
+    dispose() {
+      window.removeEventListener('resize', resize);
+      if (frameEl) { frameEl.style.opacity = '0'; frameEl.style.visibility = 'hidden'; }
+      if (miniRT) miniRT.dispose();
+      quad.geometry.dispose(); quad.material.dispose();
+      tracks.dispose();
+      stage.dispose(); renderer.dispose();
+    },
   };
 }

@@ -59,6 +59,8 @@ function segDist(x, z, ax, az, bx, bz) {
  * @param {import('../rules/types.js').TableGeometry} geom
  * @param {number} W  across the table
  */
+const PAINTED_MARKS = false;
+
 export function feltSurfaceTexture(geom, W) {
   const H = W * 2, ox = geom.outerHalfW, oz = geom.outerHalfL, R = geom.ballRadius || 0.028575;
   const data = new Uint8Array(W * H * 4);
@@ -84,7 +86,7 @@ export function feltSurfaceTexture(geom, W) {
     }
     const ang = rnd() * Math.PI, big = rnd() < 0.3;
     marks.push({ x, z, ca: Math.cos(ang), sa: Math.sin(ang), su: (big ? 0.022 : 0.009) + rnd() * 0.012, sv: 0.003 + rnd() * 0.006,
-      peak: 0.06 + rnd() * (big ? 0.08 : 0.14), seed: rnd() * 50 });
+      peak: 1.25 * (0.06 + rnd() * (big ? 0.08 : 0.14)), seed: rnd() * 50 });
   }
 
   for (let j = 0; j < H; j++) {
@@ -131,7 +133,9 @@ export function feltSurfaceTexture(geom, W) {
 
       // chalk
       let chalk = 0;
-      for (const m of marks) {
+      // Jon, item 35: no painted-on marks. The marks are still worked out above (so the cloth's grain stays the
+      // same) but none is drawn. Marks that come from play are item 36.
+      if (PAINTED_MARKS) for (const m of marks) {
         const dx = x - m.x, dz = z - m.z;
         if (dx * dx + dz * dz > 0.004) continue;
         const u = dx * m.ca + dz * m.sa, v = -dx * m.sa + dz * m.ca;
@@ -169,7 +173,7 @@ export function feltColourTexture(fields, hex, canvas) {
   const img = g.createImageData(W, H), out = img.data;
   const base = [toLin(((hex >> 16) & 255) / 255), toLin(((hex >> 8) & 255) / 255), toLin((hex & 255) / 255)];
   const luma = base[0] * 0.2126 + base[1] * 0.7152 + base[2] * 0.0722;
-  const spotC = [toLin(0.85), toLin(0.83), toLin(0.77)], chalkC = [toLin(0.3), toLin(0.5), toLin(0.78)];
+  const spotC = [toLin(0.85), toLin(0.83), toLin(0.77)], chalkC = [toLin(0.9), toLin(0.9), toLin(0.86)];   // white marks (Jon, item 35; was blue)
   // a lookup from 8-bit linear-ish value to sRGB byte, for speed
   const lut = new Uint8Array(4096); for (let i = 0; i < 4096; i++) lut[i] = Math.round(toSRGB(i / 4095) * 255);
   for (let j = 0; j < H; j++) {

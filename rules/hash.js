@@ -23,7 +23,8 @@ export function cloneState(state) {
   const out = { tick: state.tick, mode: state.mode, size: state.size, seed: state.seed, phase: state.phase, balls, shots: state.shots };
   if (state.mode === 'match') {
     const s = /** @type {any} */ (state), o = /** @type {any} */ (out);
-    o.settings = { foulRule: s.settings.foulRule };
+    // noHitFoul: a match kept from before the setting existed has none; missing means false (the default)
+    o.settings = { foulRule: s.settings.foulRule, noHitFoul: s.settings.noHitFoul === true };
     o.turn = s.turn;
     o.breaker = s.breaker;
     o.breakShot = s.breakShot;
@@ -92,6 +93,7 @@ export function hashState(state) {
     // The match fields, only in a match so a practice hash is the same as before matches existed.
     const s = /** @type {any} */ (state);
     addString(s.settings.foulRule);
+    addNumber(s.settings.noHitFoul === true ? 1 : 0);   // missing (a match kept from before the setting) counts as false
     addNumber(s.turn);
     addNumber(s.breaker);
     addNumber(s.breakShot ? 1 : 0);
