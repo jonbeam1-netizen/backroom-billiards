@@ -1,0 +1,37 @@
+{
+  "_about": "How the recorded sounds follow the hits. Each kind of sound has a few recordings (audio/sfx). For a hit, the strength runs from 0 at quietSpeed to 1 at fullSpeed (metres a second, the speed the rules report for that hit). Loudness is gain times strength to the power curve. A soft hit is also made duller and a hard one sharper: a filter lets through sound up to dullHz at strength 0 and up to sharpHz at strength 1. The recording is played a little slower (rateLow) for soft hits and a little faster (rateHigh) for hard ones, with a small random change (rateJitter) so repeats do not sound identical.",
+  "folder": "audio/sfx/",
+  "maxPerTick": 5,
+  "_aboutMaxPerTick": "At most this many sounds start in one tick (a break makes dozens of hits at once); the hardest hits win.",
+  "rateJitter": 0.03,
+  "ball": {
+    "_about": "ball hits ball",
+    "files": ["ball1.wav", "ball2.wav", "ball3.wav", "ball4.wav", "ball5.wav", "ball6.wav"],
+    "quietSpeed": 0.03, "fullSpeed": 6, "curve": 0.6, "gain": 1.0,
+    "dullHz": 1800, "sharpHz": 17000, "rateLow": 0.95, "rateHigh": 1.05
+  },
+  "cushion": {
+    "_about": "ball hits cushion",
+    "files": ["cushion1.wav", "cushion2.wav", "cushion3.wav"],
+    "quietSpeed": 0.1, "fullSpeed": 7, "curve": 0.7, "gain": 0.8,
+    "dullHz": 900, "sharpHz": 9000, "rateLow": 0.9, "rateHigh": 1.05
+  },
+  "cue": {
+    "_about": "the cue tip strikes the cue ball",
+    "files": ["cue1.wav", "cue2.wav", "cue3.wav", "cue4.wav"],
+    "quietSpeed": 0.05, "fullSpeed": 9, "curve": 0.6, "gain": 0.9,
+    "dullHz": 2000, "sharpHz": 16000, "rateLow": 0.95, "rateHigh": 1.05
+  },
+  "pocket": {
+    "_about": "a ball drops into a pocket",
+    "files": ["pocket1.wav"],
+    "quietSpeed": 0.0, "fullSpeed": 4, "curve": 0.4, "gain": 0.85,
+    "dullHz": 3000, "sharpHz": 14000, "rateLow": 0.95, "rateHigh": 1.06
+  },
+  "bounce": {
+    "_about": "a ball that was in the air lands on the felt or the rail. There is no recording of this in the pack, so it reuses the cushion recordings, played lower and duller.",
+    "files": ["cushion1.wav", "cushion2.wav", "cushion3.wav"],
+    "quietSpeed": 0.15, "fullSpeed": 2.5, "curve": 0.8, "gain": 0.45,
+    "dullHz": 500, "sharpHz": 3000, "rateLow": 0.7, "rateHigh": 0.85
+  }
+}

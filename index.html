@@ -1,0 +1,279 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Backroom Billiards</title>
+<style>
+  :root {
+    --ink: #f3ead6; --ink-soft: #cdbf9f;
+    --felt: #1c5a33; --felt-deep: #123f24;
+    --wood: #5a3418; --wood-light: #8a5628; --wood-dark: #2e1909;
+    --brass: #c9a24a; --brass-light: #ecd28a; --brass-dark: #7d5f1e;
+    --font: Georgia, 'Times New Roman', serif;
+  }
+  html, body { height: 100%; margin: 0; background: #030202; color: var(--ink); font-family: var(--font); overflow: hidden; }
+  #scene, #game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+  [hidden] { display: none !important; }
+
+  /* ---- the felt and the wood, as backgrounds */
+  :root {
+    --felt-cloth: radial-gradient(ellipse 120% 90% at 50% -10%, rgba(255,236,190,.16), rgba(0,0,0,0) 60%),
+      repeating-linear-gradient(90deg, rgba(255,255,255,.018) 0 1px, rgba(0,0,0,.02) 1px 3px),
+      repeating-linear-gradient(0deg, rgba(0,0,0,.025) 0 1px, rgba(255,255,255,.012) 1px 2px),
+      radial-gradient(ellipse at 50% 30%, #1f6a3d, #134a2a 70%, #0d3720);
+    --wood-grain: repeating-linear-gradient(94deg, #3c1a08 0 2px, #5a2b11 2px 6px, #6c3818 6px 9px, #4f250e 9px 13px, #61311a 13px 17px);
+  }
+
+  /* ---- the HUD over the table: small and out of the way */
+  #hud { position: fixed; inset: 0; pointer-events: none; }
+  .hudrow { position: absolute; left: 10px; top: 10px; right: 10px; display: flex; gap: 8px; flex-wrap: wrap; }
+  .hudrow button { pointer-events: auto; min-width: 0; font-size: clamp(13px, 1.6vw, 15px); padding: 6px 14px; }
+  /* the power gauge: a dark slot in a brass frame */
+  #power { position: absolute; left: 50%; bottom: 50px; transform: translateX(-50%); width: min(56vw, 340px); height: 12px; padding: 3px;
+    border-radius: 9px; box-sizing: content-box;
+    background: linear-gradient(180deg, var(--brass-light), var(--brass) 50%, var(--brass-dark));
+    box-shadow: 0 2px 8px rgba(0,0,0,.7), inset 0 1px 0 rgba(255,250,220,.6); }
+  #power::before { content: ''; position: absolute; inset: 3px; border-radius: 6px; background: #120c06; box-shadow: inset 0 2px 4px rgba(0,0,0,.9); }
+  #powerFill { position: relative; height: 100%; width: 0; border-radius: 6px;
+    background: linear-gradient(180deg, rgba(255,255,255,.35), rgba(255,255,255,0) 55%), linear-gradient(90deg, #efe0a0, #e6a13a 60%, #c8321e); }
+  /* the picture of the cue ball: where the tip hits, and how far the cue is raised */
+  #spinBox { position: absolute; right: 12px; bottom: 50px; width: clamp(84px, 12vw, 120px); pointer-events: auto; text-align: center;
+    padding: 9px 9px 7px; border-radius: 5px; background: var(--felt-cloth);
+    border: 6px solid transparent; border-image: var(--wood-grain) 6;
+    box-shadow: 0 4px 14px rgba(0,0,0,.7), inset 0 0 14px rgba(0,0,0,.55); }
+  #spinPad { position: relative; width: 100%; aspect-ratio: 1; border-radius: 50%; cursor: crosshair;
+    background: radial-gradient(circle at 36% 30%, #fffdf6 0, #f2ead6 30%, #ddd2b6 70%, #a99d80 100%);
+    box-shadow: 0 3px 6px rgba(0,0,0,.55), inset 0 -5px 10px rgba(60,40,10,.25); }
+  #spinLimit { position: absolute; left: 25%; top: 25%; width: 50%; height: 50%; border-radius: 50%; border: 1px dashed rgba(70,45,10,.5); box-sizing: border-box; }
+  #spinDot { position: absolute; left: 50%; top: 50%; width: 12px; height: 12px; margin: -6px 0 0 -6px; border-radius: 50%;
+    background: radial-gradient(circle at 35% 30%, #e8604a, #b52a17 60%, #6e1408); box-shadow: 0 1px 2px rgba(0,0,0,.6); pointer-events: none; }
+  #elevText { margin-top: 6px; font-size: 13px; color: var(--ink); text-shadow: 0 1px 2px #000; }
+  #elevSlider { width: 100%; margin: 3px 0 0; accent-color: var(--brass); cursor: pointer; }
+  #hint { position: absolute; left: 0; right: 0; bottom: 12px; text-align: center; font-size: clamp(13px, 1.7vw, 15px);
+    color: var(--ink); text-shadow: 0 1px 2px #000, 0 0 6px #000, 0 0 12px #000; padding: 0 12px; }
+
+  /* ---- the title */
+  #title { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: flex-start;
+    padding: clamp(10px, 5vh, 56px) 16px 16px; box-sizing: border-box; pointer-events: none; }
+  /* a felt panel in a wood frame, with a thin brass line inside the frame */
+  .panel { pointer-events: auto; text-align: center; max-width: min(92vw, 500px); box-sizing: border-box;
+    padding: clamp(12px, 3vh, 26px) clamp(18px, 5vw, 44px) clamp(10px, 2.4vh, 20px);
+    background: var(--felt-cloth);
+    border: clamp(9px, 1.8vh, 15px) solid transparent; border-image: var(--wood-grain) 15;
+    border-radius: 3px;
+    box-shadow: 0 14px 44px rgba(0,0,0,.75), inset 0 0 0 1px rgba(201,162,74,.55), inset 0 0 0 3px rgba(0,0,0,.35), inset 0 0 30px rgba(0,0,0,.5); }
+  h1 { margin: 0 0 2px; font-size: clamp(26px, 6vw, 46px); line-height: 1.05; letter-spacing: .03em; font-weight: 700; color: #f4ead2;
+    text-shadow: 0 -1px 0 rgba(0,0,0,.6), 0 2px 0 rgba(0,0,0,.45), 0 0 18px rgba(255,230,170,.12); }
+  .sub { margin: 4px 0 clamp(10px, 2.4vh, 20px); font-size: clamp(14px, 2.1vw, 17px); color: var(--ink-soft); font-style: italic; letter-spacing: .04em; }
+  .buttons { display: flex; flex-direction: column; gap: 10px; align-items: center; }
+  /* two smaller plates side by side (Sound and Settings on the title); they stack when there is no room */
+  .pair { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+  .pair button { min-width: min(36vw, 125px); }
+
+  /* ---- a brass plate: engraved lettering, two small screws, presses in */
+  button { position: relative; font-family: var(--font); font-size: clamp(15px, 2.3vw, 18px); font-weight: 700; color: #33240a; cursor: pointer;
+    min-width: min(72vw, 260px); padding: 10px 30px; border-radius: 3px; border: 1px solid #6a4f16;
+    background: linear-gradient(180deg, rgba(255,255,255,.28), rgba(255,255,255,0) 45%, rgba(0,0,0,.08) 100%),
+      repeating-linear-gradient(90deg, rgba(255,255,255,.05) 0 1px, rgba(0,0,0,.03) 1px 3px),
+      linear-gradient(180deg, #ecd48c, #c9a24a 55%, #a5822f);
+    text-shadow: 0 1px 0 rgba(255,244,205,.65), 0 -1px 0 rgba(60,40,5,.25);
+    box-shadow: 0 2px 0 #6a4f16, 0 4px 10px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,250,225,.7), inset 0 -1px 0 rgba(90,60,10,.4); }
+  button::before, button::after { content: ''; position: absolute; top: 50%; width: 6px; height: 6px; margin-top: -3px; border-radius: 50%;
+    background: radial-gradient(circle at 35% 35%, #fff3c4, #b08a35 55%, #5c4310); box-shadow: 0 0 0 1px rgba(80,55,10,.35); }
+  button::before { left: 9px; } button::after { right: 9px; }
+  .hudrow button { padding: 6px 22px; }
+  .hudrow button::before { left: 7px; } .hudrow button::after { right: 7px; }
+  /* a small window: slimmer plates, so the whole row (with Settings) stays on one line clear of the corner pockets */
+  @media (max-width: 820px) { .hudrow { gap: 6px; } .hudrow button { padding: 6px 15px; } .hudrow button::before { left: 5px; } .hudrow button::after { right: 5px; } }
+  button:hover:not(:disabled) { filter: brightness(1.07); }
+  button:focus-visible { outline: 2px solid #f6e7b0; outline-offset: 2px; }
+  button:active:not(:disabled) { transform: translateY(2px);
+    box-shadow: 0 0 0 #6a4f16, 0 1px 4px rgba(0,0,0,.6), inset 0 2px 4px rgba(80,55,10,.45); }
+  button:disabled { cursor: default; color: #3b3326; text-shadow: 0 1px 0 rgba(255,240,210,.25);
+    background: linear-gradient(180deg, #a59a80, #857a62 60%, #6c624d); border-color: #4c4434;
+    box-shadow: 0 2px 0 #4c4434, 0 3px 8px rgba(0,0,0,.5), inset 0 1px 0 rgba(255,250,230,.25); }
+  button:disabled::before, button:disabled::after { background: radial-gradient(circle at 35% 35%, #d8d0bc, #7d735e 60%, #4a4232); }
+  /* the match: whose turn, which balls, the small foul line, the called pocket, the end of the game */
+  #matchBar { position: absolute; left: 50%; top: 52px; transform: translateX(-50%); display: flex; gap: 10px; }
+  #matchBar .who { min-width: clamp(120px, 20vw, 190px); padding: 5px 12px 6px; text-align: center; border-radius: 4px;
+    border: 1px solid rgba(201,162,74,.45); background: rgba(8,24,14,.72); color: var(--ink-soft); font-size: clamp(13px, 1.6vw, 15px);
+    box-shadow: 0 2px 8px rgba(0,0,0,.55); }
+  #matchBar .who b { display: block; color: var(--ink); letter-spacing: .04em; }
+  #matchBar .who.turn { border-color: var(--brass-light); color: var(--ink); box-shadow: 0 0 0 1px var(--brass), 0 2px 10px rgba(0,0,0,.6); background: rgba(20,60,34,.86); }
+  #matchMsg { position: absolute; left: 0; right: 0; top: 112px; text-align: center; font-size: clamp(13px, 1.7vw, 15px);
+    color: var(--ink); text-shadow: 0 1px 3px #000, 0 0 8px #000; padding: 0 10px; }
+  #pocketMark { position: absolute; width: 34px; height: 34px; margin: -17px 0 0 -17px; border-radius: 50%; box-sizing: border-box;
+    border: 3px solid var(--brass-light); box-shadow: 0 0 8px rgba(0,0,0,.8), inset 0 0 6px rgba(0,0,0,.6); }
+  #overPanel { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); }
+  #overPanel h2 { margin: 0; font-size: clamp(22px, 4.4vw, 34px); letter-spacing: .04em; text-shadow: 0 2px 0 rgba(0,0,0,.5); }
+  #note { margin: 12px 0 0; font-size: 14px; color: var(--ink-soft); min-height: 1em; }
+  #note:empty { margin: 0; min-height: 0; }
+  #overWait { margin: 0 0 12px; font-size: clamp(14px, 1.9vw, 16px); color: var(--brass-light); }
+
+  /* ---- online: the join box and the lobby */
+  #title { overflow-y: auto; }
+  .codeInput { font-family: var(--font); font-size: clamp(28px, 6vw, 40px); font-weight: 700; letter-spacing: .3em; text-align: center;
+    text-transform: uppercase; width: 5.2em; padding: 6px 0 6px .3em; margin: 4px 0 12px; color: var(--ink); background: rgba(5,18,10,.75);
+    border: 2px solid var(--brass); border-radius: 4px; box-shadow: inset 0 2px 6px rgba(0,0,0,.8); outline: none; }
+  .codeInput:focus { border-color: var(--brass-light); }
+  .label { font-size: clamp(13px, 1.8vw, 15px); color: var(--ink-soft); letter-spacing: .06em; }
+  #lobby h2 { margin: 0 0 6px; font-size: clamp(22px, 4vw, 30px); letter-spacing: .04em; text-shadow: 0 2px 0 rgba(0,0,0,.5); }
+  #lobbyCode { font-size: clamp(40px, 9vw, 64px); font-weight: 700; letter-spacing: .25em; padding-left: .25em; line-height: 1.1; color: #fff4d4;
+    text-shadow: 0 2px 0 rgba(0,0,0,.6), 0 0 16px rgba(255,230,170,.18); margin: 0 0 8px; }
+  .players { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin: 0 0 12px; }
+  .players div { min-width: 10em; padding: 5px 10px; border-radius: 4px; border: 1px solid rgba(201,162,74,.45); background: rgba(8,24,14,.72);
+    font-size: clamp(14px, 1.8vw, 16px); }
+  .players div.on { border-color: var(--brass-light); box-shadow: 0 0 0 1px var(--brass); }
+  .settings { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 0 0 6px; }
+  .settings button { min-width: 0; font-size: clamp(13px, 1.7vw, 15px); padding: 8px 18px; }
+  #lobbyNote, #lobbyStatus { margin: 6px 0 10px; font-size: clamp(14px, 1.8vw, 16px); }
+  #lobbyNote { color: var(--ink-soft); font-style: italic; }
+  #lobbyStatus { color: var(--ink); min-height: 1.3em; }
+  @media (max-width: 460px) { .settings { grid-template-columns: 1fr; } }
+  /* ---- the settings screen: a felt panel over the title or the table */
+  #settingsLayer { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; padding: 10px; box-sizing: border-box;
+    background: rgba(2,1,0,.5); z-index: 20; }
+  body.settings-open #title, body.settings-open #stamp, body.settings-open #hint, body.settings-open #fineNote { visibility: hidden; }
+  #settingsPanel { max-width: min(94vw, 540px); width: 100%; max-height: 100%; overflow-y: auto;
+    padding: clamp(10px, 2.4vh, 22px) clamp(14px, 4vw, 34px) clamp(10px, 2vh, 18px); }
+  #settingsPanel h2 { margin: 0 0 clamp(6px, 1.6vh, 14px); font-size: clamp(22px, 4vw, 30px); letter-spacing: .04em; text-shadow: 0 2px 0 rgba(0,0,0,.5); }
+  .setGrid { display: grid; grid-template-columns: auto 1fr; gap: clamp(6px, 1.4vh, 12px) 16px; align-items: center; text-align: left; margin: 0 0 clamp(8px, 1.8vh, 14px); }
+  .setName { font-size: clamp(14px, 1.9vw, 16px); color: var(--ink); letter-spacing: .03em; white-space: nowrap; }
+  .setCtl { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; min-width: 0; }
+  .setCtl input[type=range] { flex: 1 1 140px; min-width: 110px; margin: 0; accent-color: var(--brass); cursor: pointer; }
+  .setVal { min-width: 3.4em; font-size: clamp(14px, 1.9vw, 16px); color: var(--brass-light); font-variant-numeric: tabular-nums; }
+  .setHelp { font-size: clamp(12px, 1.6vw, 14px); color: var(--ink-soft); font-style: italic; }
+  .setNote { grid-column: 1 / -1; margin: -2px 0 0; font-size: clamp(12px, 1.6vw, 14px); color: var(--ink-soft); font-style: italic; }
+  .setCtl button { min-width: 0; font-size: clamp(13px, 1.7vw, 15px); padding: 6px 20px; }
+  .setCtl button::before { left: 7px; } .setCtl button::after { right: 7px; }
+  /* a choice or a switch: the plate in use is pressed in and bright, the others sit back */
+  .setCtl button[aria-pressed=false] { filter: brightness(.72) saturate(.7); }
+  .setCtl button[aria-pressed=false]:hover { filter: brightness(.85) saturate(.8); }
+  .setCtl button[aria-pressed=true] { transform: translateY(1px);
+    box-shadow: 0 1px 0 #6a4f16, 0 1px 4px rgba(0,0,0,.6), inset 0 2px 4px rgba(80,55,10,.4), 0 0 0 2px rgba(246,231,176,.55); }
+  .choice { gap: 8px; }
+  .choice button { flex: 1 1 0; padding: 6px 12px; }
+  .sw { display: inline-block; width: 13px; height: 13px; margin: 0 7px -2px 0; border-radius: 50%; border: 1px solid rgba(40,25,5,.7);
+    box-shadow: inset 0 1px 2px rgba(255,255,255,.25), 0 1px 1px rgba(255,240,200,.4); }
+  .sw.green { background: #17643c; } .sw.blue { background: #1a4f86; } .sw.red { background: #6e1822; }
+  @media (max-width: 460px) { .setGrid { grid-template-columns: 1fr; gap: 4px; } .setName { margin-top: 6px; } }
+  /* the small line at the table while fine aim is kept on */
+  #fineNote { position: absolute; left: 0; right: 0; bottom: 74px; text-align: center; font-size: 13px; letter-spacing: .04em; color: var(--brass-light);
+    text-shadow: 0 1px 2px #000, 0 0 6px #000, 0 0 10px #000; pointer-events: none; }
+  /* in a wide window the table lies on its side from above, with a corner pocket at the bottom right:
+     the cue ball picture sits at the middle of the right edge instead, where no pocket is */
+  @media (min-aspect-ratio: 1/1) { #spinBox { top: 50%; bottom: auto; transform: translateY(-50%); } }
+  #stamp { position: fixed; left: 0; right: 0; bottom: 10px; text-align: center; font-size: 13px; letter-spacing: .06em; color: var(--ink-soft);
+    text-shadow: 0 1px 2px #000, 0 0 8px #000; pointer-events: none; }
+</style>
+</head>
+<body>
+<canvas id="scene"></canvas>
+<canvas id="game" hidden></canvas>
+<div id="hud" hidden>
+  <div class="hudrow">
+    <button id="exitBtn" type="button">Title</button>
+    <button id="rackBtn" type="button">Rack again</button>
+    <button id="viewBtn" type="button">View</button>
+    <button id="aimHelpBtn" type="button">Aim help</button>
+    <button id="hudSettingsBtn" type="button">Settings</button>
+  </div>
+  <div id="spinBox">
+    <div id="spinPad"><div id="spinLimit"></div><div id="spinDot"></div></div>
+    <div id="elevText">Cue raised 4°</div>
+    <input id="elevSlider" type="range" min="4" max="60" step="1" value="4" aria-label="Raise the cue">
+  </div>
+  <div id="matchBar" hidden>
+    <div class="who" id="who0"><b>Player 1</b><span id="grp0"></span></div>
+    <div class="who" id="who1"><b>Player 2</b><span id="grp1"></span></div>
+  </div>
+  <div id="matchMsg" hidden></div>
+  <div id="pocketMark" hidden></div>
+  <div id="overPanel" class="panel" hidden>
+    <h2 id="overText"></h2>
+    <p class="sub" id="overWhy"></p>
+    <p id="overWait" hidden></p>
+    <div class="buttons">
+      <button id="rematchBtn" type="button">Rematch</button>
+      <button id="overTitleBtn" type="button">Title</button>
+    </div>
+  </div>
+  <div id="power"><div id="powerFill"></div></div>
+  <div id="fineNote" hidden>Fine aim on (F)</div>
+  <div id="hint"></div>
+</div>
+<div id="title">
+  <div class="panel" id="titlePanel">
+    <h1>Backroom Billiards</h1>
+    <p class="sub">8-ball for two</p>
+    <div class="buttons" id="titleButtons">
+      <button id="resumeBtn" type="button" hidden>Resume online game</button>
+      <button id="hostBtn" type="button">Host online game</button>
+      <button id="joinBtn" type="button">Join online game</button>
+      <button id="matchBtn" type="button">Play 8-ball: two players, this PC</button>
+      <button id="practiceBtn" type="button">Practice alone</button>
+      <div class="pair">
+        <button id="muteBtn" type="button">Sound: on</button>
+        <button id="settingsBtn" type="button">Settings</button>
+      </div>
+    </div>
+    <div id="joinBox" hidden>
+      <div class="label">Type the 4-character code from your friend</div>
+      <input id="codeBox" class="codeInput" type="text" maxlength="4" autocomplete="off" spellcheck="false" aria-label="Join code">
+      <div class="buttons">
+        <button id="joinGoBtn" type="button" disabled>Join</button>
+        <button id="joinBackBtn" type="button">Back</button>
+      </div>
+    </div>
+    <p id="note"></p>
+  </div>
+  <div class="panel" id="lobby" hidden>
+    <h2>Online game</h2>
+    <div class="label">Join code</div>
+    <div id="lobbyCode">····</div>
+    <div class="players"><div id="lobbyHost">Host</div><div id="lobbyFriend">Friend</div></div>
+    <div class="settings">
+      <button id="setAim" type="button">Aim help</button>
+      <button id="setFoul" type="button">After a foul</button>
+      <button id="setSize" type="button">Table</button>
+      <button id="setTop" type="button">View from above</button>
+    </div>
+    <p id="lobbyNote"></p>
+    <p id="lobbyStatus"></p>
+    <div class="buttons">
+      <button id="startBtn" type="button" disabled>Start</button>
+      <button id="leaveBtn" type="button">Leave</button>
+    </div>
+  </div>
+</div>
+<div id="stamp"></div>
+<div id="settingsLayer" hidden>
+  <div class="panel" id="settingsPanel" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+    <h2 id="settingsTitle">Settings</h2>
+    <div class="setGrid">
+      <div class="setName">Volume</div>
+      <div class="setCtl"><input id="volSlider" type="range" min="0" max="100" step="1" value="80" aria-label="Volume"><span class="setVal" id="volVal">80%</span></div>
+      <div class="setName">Sound</div>
+      <div class="setCtl"><button id="soundBtn" type="button" aria-pressed="true">On</button></div>
+      <p class="setNote" id="soundNote" hidden>Sound is off for this run: muted by the address.</p>
+      <div class="setName">Aim sensitivity</div>
+      <div class="setCtl"><input id="aimSlider" type="range" min="0" max="100" step="1" value="56" aria-label="Aim sensitivity"><span class="setVal" id="aimVal">1.00x</span></div>
+      <div class="setName">Fine aim</div>
+      <div class="setCtl"><button id="fineBtn" type="button" aria-pressed="false">Off</button><span class="setHelp">slow, careful aiming · F switches it at the table</span></div>
+      <div class="setName">Picture quality</div>
+      <div class="setCtl choice" id="qualityChoice">
+        <button type="button" data-v="low">Low</button><button type="button" data-v="medium">Medium</button><button type="button" data-v="high">High</button>
+      </div>
+      <div class="setName">Felt color</div>
+      <div class="setCtl choice" id="feltChoice">
+        <button type="button" data-v="green"><i class="sw green"></i>Green</button><button type="button" data-v="blue"><i class="sw blue"></i>Blue</button><button type="button" data-v="red"><i class="sw red"></i>Red</button>
+      </div>
+      <p class="setNote" id="lookNote" hidden>The address set the picture quality or felt color for this run.</p>
+    </div>
+    <div class="buttons"><button id="settingsDone" type="button">Done</button></div>
+  </div>
+</div>
+<script type="module" src="./main.js"></script>
+</body>
+</html>

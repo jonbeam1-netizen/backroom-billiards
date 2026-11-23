@@ -1,0 +1,57 @@
+{
+  "_about": "How the mouse turns into aim and power, and where the cameras sit. Metres, seconds, radians.",
+  "aim": {
+    "_about": "radPerPixel: how far the aim turns per pixel of mouse movement. fineFactor: the share of that while fine aim (Shift) is held. keyRadPerSec: turning speed with the arrow keys.",
+    "radPerPixel": 0.0022,
+    "fineFactor": 0.15,
+    "keyRadPerSec": 0.5,
+    "_aboutCenter": "Only when the browser will not capture the mouse: the cursor works like a stick. Within centerDeadShare of the middle (a share of half the screen width) the aim stands still. Beyond it the aim turns, up to centerRadPerSec at the screen edge. centerCurve above 1 makes it gentle near the middle.",
+    "centerDeadShare": 0.05,
+    "centerRadPerSec": 3.0,
+    "centerCurve": 2
+  },
+  "power": {
+    "_about": "pullPixels: mouse travel for a full pull. curve: above 1 gives more room for soft shots. minShare: the softest shot as a share of the hardest. minPullToShoot: a smaller pull than this cancels the shot.",
+    "pullPixels": 320,
+    "_aboutCenter": "Power is the cursor's distance from the cue ball on the screen. deadPixels: within this distance of the ball the power is nothing. Full power is at pullPixels beyond that, or at screenShare of the window's shorter side if that is less (so a small window still reaches full power).",
+    "deadPixels": 14,
+    "screenShare": 0.42,
+    "curve": 1.7,
+    "minShare": 0.015,
+    "minPullToShoot": 0.03
+  },
+  "camera": {
+    "_about": "The aiming camera sits aimBack behind the cue ball and aimHeight above the felt, and looks at a point aimLookAhead in front of the ball. follow: how quickly it glides to a new place (higher is quicker).",
+    "aimBack": 0.82,
+    "aimHeight": 0.36,
+    "aboveCue": 0.16,
+    "aimLookAhead": 0.6,
+    "aimFov": 46,
+    "follow": 9,
+    "topFov": 28,
+    "topMargin": 0.1
+  },
+  "cue": {
+    "_about": "restGap: tip to ball while aiming. pullDistance: how far the cue draws back at full power.",
+    "length": 1.47,
+    "restGap": 0.012,
+    "pullDistance": 0.26,
+    "_aboutAngle": "How far the butt of the cue can be raised, in degrees above the lowest (the lowest is the default in physics.json, about 4). wheelStepDeg: degrees per notch of the mouse wheel. resetAfterShot: the cue goes back down after every shot.",
+    "maxElevDeg": 60,
+    "raisedPowerShare": 1,
+    "_aboutRaisedPower": "The share of full power left when the cue is raised all the way; in between it falls evenly. A steep cue cannot be swung as hard.",
+    "wheelStepDeg": 2,
+    "resetAfterShot": true
+  },
+  "spin": {
+    "_about": "Where the tip hits the cue ball. sideSpin: false locks the hit point to the up-down line (top and back spin only). dragPixels: mouse travel, with the right button held, from the middle of the ball to its edge. keyPerSec: how fast W and S (and A and D) move the hit point, in ball radii per second. resetAfterShot: the hit point goes back to the middle after every shot.",
+    "sideSpin": true,
+    "dragPixels": 160,
+    "keyPerSec": 0.6,
+    "resetAfterShot": true
+  },
+  "place": {
+    "_about": "How far the cue ball in hand moves per pixel of mouse movement.",
+    "metresPerPixel": 0.002
+  }
+}

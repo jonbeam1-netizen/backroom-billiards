@@ -1,0 +1,57 @@
+{
+  "_about": "How the balls move. Metres, seconds, kilograms, radians. The rules read every tuning number from here. Values are published pool-table measurements unless a note says otherwise.",
+  "tickRate": 60,
+  "gravity": 9.81,
+  "shot": {
+    "_about": "The cue strike. maxShotSpeed: the fastest the cue ball can leave the tip (about a strong break). defaultElevSin / defaultElevCos: sine and cosine of the usual cue elevation, about 4 degrees (a real cue is never level). maxTipOffset: how far from the centre the tip may hit, as a share of the ball radius; kept at 0.5 so no miscue is needed. bedRestitution and bedSqueezeSpeed: a raised cue drives the ball down into the felt while the tip is still on it, so the ball is squeezed between tip and cloth and the bounce is damped (tuned, not measured). With r = downward speed / bedSqueezeSpeed, upward speed = bedRestitution x downward speed / eighth root of (1 + r^8): a gentle strike bounces back at bedRestitution like a plain bounce, a harder one levels off, and no hop ever comes back faster than bedRestitution x bedSqueezeSpeed (m/s). squeezeLoss: the squeeze also takes forward speed (and spin, in the same share): the ball leaves slower by squeezeLoss x (the upward speed a plain bounce would have given minus the upward speed it got), so a gentle or nearly level strike loses nothing and a hard steep one loses a lot. Cloth friction during the squeeze takes a little more on top.",
+    "maxShotSpeed": 10,
+    "defaultElevSin": 0.069756,
+    "defaultElevCos": 0.997564,
+    "maxTipOffset": 0.5,
+    "bedRestitution": 0.5,
+    "bedSqueezeSpeed": 2.0,
+    "squeezeLoss": 0.6
+  },
+  "cloth": {
+    "_about": "The felt. slidingFriction: ball-cloth friction while the ball skids. rollingFriction: rolling resistance once it rolls (slow-down = this x gravity). spinFriction: how fast spin about the upright axis dies (spin slow-down = 2.5 x this x gravity / radius, rad/s per second). bounceRestitution: how much of the downward speed comes back when a ball lands on the felt. bounceMinSpeed: landings slower than this do not bounce and make no event. liftMinSpeed: an upward speed below this, given to a ball on the felt by a hit, is dropped so balls do not micro-hop. pressReach: when a cushion or another ball pushes a ball down and the ball is on the felt or less than this high above it, the ball reaches the felt while the hit is still going on, so the felt takes that push; a ball-ball push never bounces, a cushion push bounces only on a very hard hit (see cushion.hopMinSpeed).",
+    "slidingFriction": 0.2,
+    "rollingFriction": 0.01,
+    "spinFriction": 0.0127,
+    "bounceRestitution": 0.5,
+    "bounceMinSpeed": 0.1,
+    "liftMinSpeed": 0.05,
+    "pressReach": 0.01
+  },
+  "ballBall": {
+    "_about": "Ball on ball. restitution: share of the closing speed that comes back. friction: friction at the contact; it gives the small throw and a little spin transfer.",
+    "restitution": 0.95,
+    "friction": 0.05
+  },
+  "cushion": {
+    "_about": "The rubber cushion. Restitution falls from restitutionSlow at a gentle touch to restitutionFast at fastSpeed (closing speed, m/s) and stays there above it. friction: rubber-ball friction at the nose, so spin changes the rebound. The nose sits above the ball's middle, so a hit pushes the ball down into the felt. hopMinSpeed and hopGain: the soft rubber soaks up that push up to hopMinSpeed (closing speed into the cushion, m/s), so ordinary hits never hop; above it the rest gets through and the ball hops off the bed at hopGain x (closing speed - hopMinSpeed) m/s upward. No randomness (tuned, not measured).",
+    "restitutionSlow": 0.9,
+    "restitutionFast": 0.75,
+    "fastSpeed": 6,
+    "friction": 0.17,
+    "hopMinSpeed": 6,
+    "hopGain": 0.27
+  },
+  "rail": {
+    "_about": "The wooden rail top. bounceRestitution: share of the downward speed that comes back when a flying ball lands on the wood.",
+    "bounceRestitution": 0.6
+  },
+  "rack": {
+    "_about": "The racked triangle. gap: extra space between neighbouring balls (they nearly touch). jitter: the seeded random nudge of each ball, up to this far in X and Z; kept under gap / 2.9 so balls never overlap.",
+    "gap": 0.0002,
+    "jitter": 0.00006
+  },
+  "sim": {
+    "_about": "How the rules step time. maxMovePerSubstep: no ball moves more than this share of its radius in one substep (stops tunnelling). maxSubsteps: cap per tick. maxSolverPasses: how many times per substep the hits are re-checked so a hit can pass through a frozen row of balls. restSpeed (m/s) and restSpin (rad/s): below these a ball on the felt is stopped dead. potDepth: a ball whose centre is over a hole and lower than this many radii above the felt is potted.",
+    "maxMovePerSubstep": 0.25,
+    "maxSubsteps": 400,
+    "maxSolverPasses": 24,
+    "restSpeed": 0.002,
+    "restSpin": 0.05,
+    "potDepth": 1.5
+  }
+}

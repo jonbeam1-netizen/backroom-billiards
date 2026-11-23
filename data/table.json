@@ -1,0 +1,38 @@
+{
+  "_about": "The table's measurements. Metres, Y up. The table runs along Z: break end at +Z, rack end at -Z. X 0, Z 0 is the centre of the playing surface and Y 0 is the top of the felt. The rules and the view both build the table from this file.",
+  "defaultSize": "9",
+  "sizes": {
+    "_about": "length and width of the playing surface, measured between the cushion noses",
+    "9": { "length": 2.54, "width": 1.27 },
+    "8": { "length": 2.24, "width": 1.12 },
+    "7": { "length": 1.98, "width": 0.99 }
+  },
+  "ball": {
+    "radius": 0.028575,
+    "mass": 0.17
+  },
+  "cushion": {
+    "_about": "noseHeight: height of the cushion's contact edge above the felt. railTopHeight: height of the flat top of the rail. depth: from the cushion nose back to the wood. railWidth: width of the wooden rail behind the cushion; beyond its outer edge there is nothing and a ball falls to the floor.",
+    "noseHeight": 0.0363,
+    "railTopHeight": 0.042,
+    "depth": 0.05,
+    "railWidth": 0.1
+  },
+  "pockets": {
+    "_about": "mouth: gap between the two cushion nose tips of a pocket. jawRun: how far the angled jaw face runs toward the pocket's middle (along the rail) while it goes back by cushion.depth; given as plain numbers so no angle maths is needed. shelf: distance from the middle of the mouth line to the edge of the hole. holeRadius: radius of the hole a ball drops into.",
+    "cornerMouth": 0.117,
+    "cornerJawRun": 0.064,
+    "cornerShelf": 0.035,
+    "cornerHoleRadius": 0.068,
+    "sideMouth": 0.13,
+    "sideJawRun": 0.0125,
+    "sideShelf": 0.008,
+    "sideHoleRadius": 0.068
+  },
+  "spots": {
+    "_about": "as a share of the table length from the centre. The line (head string) is at +lineZ * length; behind the line means Z greater than that. The front ball of the rack sits at -rackZ * length.",
+    "lineZ": 0.25,
+    "rackZ": 0.25
+  },
+  "floorY": -0.8
+}
