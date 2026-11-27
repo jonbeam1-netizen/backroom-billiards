@@ -12,7 +12,7 @@
 // - The shooter sends the cue (aim, power, hit point, cue angle, cue ball in hand) about 12 times a second; the
 //   other PC draws it from that, smoothed.
 import * as rules from './rules/index.js';
-import { buildTable, createGame, step, firstContact, canPlaceCue, hashState, runReplay } from './rules/index.js';
+import { buildTable, createGame, step, firstContact, previewShot, canPlaceCue, hashState, runReplay } from './rules/index.js';
 import { createGameView } from './view/gameView.js';
 import { playEvents } from './audio/audio.js';
 import { make } from './net/protocol.js';
@@ -121,11 +121,11 @@ export function startPractice(o) {
     hud.aimHelpBtn.textContent = 'Aim help: ' + AIM_HELP[aimHelp];
     hud.viewBtn.textContent = view.getMode() === 'top' ? 'View: from above (V)' : 'View: behind the ball (V)';
   }
-  /** The speed a pull of 0 to 1 gives the cue ball. */
-  function pullToSpeed(pull) {
+  /** The speed a pull of 0 to 1 gives the cue ball, with the cue raised `deg` degrees (this player's own cue when left out). */
+  function pullToSpeed(pull, deg = elevDeg) {
     const p = controls.power;
     // a steeply raised cue cannot be swung as hard: full power when level, less the higher the butt is
-    const raised = (elevDeg - minElev) / Math.max(1, maxElev - minElev);
+    const raised = (deg - minElev) / Math.max(1, maxElev - minElev);
     const share = 1 - (1 - controls.cue.raisedPowerShare) * Math.max(0, Math.min(1, raised));
     return phys.shot.maxShotSpeed * share * (p.minShare + (1 - p.minShare) * Math.pow(pull, p.curve));
   }
@@ -169,10 +169,40 @@ export function startPractice(o) {
     online.send(make.act(sync.game, entry.seq, me, action, entry.pull));
     return true;
   }
-  function shotAction(pull) {
-    const e = elev();
-    return { type: 'shoot', dirX: Math.sin(yaw), dirZ: -Math.cos(yaw), speed: pullToSpeed(pull), offX: spinX, offY: spinY,
+  function shotAction(pull) { return shotFrom(yaw, pull, elevDeg, spinX, spinY); }
+  /** The shoot action for these cue values (the full aim help's look-ahead uses the very same one). */
+  function shotFrom(y, pull, deg, offX, offY) {
+    const e = elevOf(deg);
+    return { type: 'shoot', dirX: Math.sin(y), dirZ: -Math.cos(y), speed: pullToSpeed(pull, deg), offX, offY,
       elevSin: e.sin, elevCos: e.cos };
+  }
+
+  // ---- the full aim help's look-ahead (item 40): the shot played ahead with the real rules, re-run only when
+  // something it depends on changes (the cue values, or the balls)
+  const previewLimits = (controls.aimHelp && controls.aimHelp.preview) || { maxTicks: 600, cueAfterLength: 0.4, cueAfterTicks: 90, targetLength: 1.6, pointSpacing: 0.008 };
+  const pvKey = new Float64Array(5 + 16 * 4), pvNew = new Float64Array(5 + 16 * 4);
+  let pvState = null, pvPhase = '', pvLast = null;
+  const pvStats = { runs: 0, totalMs: 0, maxMs: 0, lastMs: 0 };
+  /**
+   * The look-ahead for these cue values, or null when there is no power on the cue yet (then the full aim help
+   * draws the plain straight lines, as before item 40).
+   */
+  function shotPreview(y, pull, deg, offX, offY) {
+    if (!(pull >= controls.power.minPullToShoot)) { pvLast = null; pvState = null; return null; }
+    pvNew[0] = y; pvNew[1] = pull; pvNew[2] = deg; pvNew[3] = offX; pvNew[4] = offY;
+    for (let i = 0; i < 16; i++) {
+      const b = state.balls[i], j = 5 + i * 4;
+      pvNew[j] = b.x; pvNew[j + 1] = b.y; pvNew[j + 2] = b.z; pvNew[j + 3] = b.where === 'table' ? 1 : 0;
+    }
+    let same = pvLast !== null && pvState === state && pvPhase === state.phase;
+    for (let i = 0; same && i < pvNew.length; i++) if (pvNew[i] !== pvKey[i]) same = false;
+    if (same) return pvLast;
+    const t0 = performance.now();
+    pvLast = previewShot(state, data, shotFrom(y, pull, deg, offX, offY), previewLimits);
+    const ms = performance.now() - t0;
+    pvStats.runs++; pvStats.totalMs += ms; pvStats.lastMs = ms; if (ms > pvStats.maxMs) pvStats.maxMs = ms;
+    pvKey.set(pvNew); pvState = state; pvPhase = state.phase;
+    return pvLast;
   }
   function queueShot(pull) {
     const shot = shotAction(pull), cb = state.balls[0];
@@ -288,14 +318,18 @@ export function startPractice(o) {
 
     // what the cue looks like: this player's own, or online while the other player shoots, theirs (smoothed)
     let dirX = Math.sin(yaw), dirZ = -Math.cos(yaw), e = elev(), offX = spinX, offY = spinY, shownGhost = ghost;
+    let shownYaw = yaw, shownDeg = elevDeg;
     if (online && state.turn !== me) {
       smoothRemote(dt);
       const s = sync.shown;
       dirX = Math.sin(s.yaw); dirZ = -Math.cos(s.yaw); e = elevOf(s.elevDeg); offX = s.offX; offY = s.offY; pull = s.pull;
-      shownGhost = s.ghost;
+      shownGhost = s.ghost; shownYaw = s.yaw; shownDeg = s.elevDeg;
     } else if (online && free) sendAim(pull);
     const aiming = state.phase === 'aim';
     const contact = aiming && AIM_HELP[aimHelp] !== 'none' ? firstContact(state, data, dirX, dirZ) : null;
+    // full aim help only: the real paths, from the same cue values that are drawn (online, the shooter's shown cue)
+    const preview = aiming && AIM_HELP[aimHelp] === 'full' && state.balls[0].where === 'table' ? shotPreview(shownYaw, pull, shownDeg, offX, offY) : null;
+    if (!preview) pvLast = null;
 
     if (isMatch) showMatch();
     const mine = aiming && free;
@@ -317,7 +351,7 @@ export function startPractice(o) {
           : '';
 
     view.render({ state, prev, alpha: acc / TICK, dt, dirX, dirZ, elevSin: e.sin, elevCos: e.cos, offX, offY,
-      pull, aimHelp: AIM_HELP[aimHelp], contact, ghost: state.phase === 'place' ? shownGhost : null,
+      pull, aimHelp: AIM_HELP[aimHelp], contact, preview, ghost: state.phase === 'place' ? shownGhost : null,
       peek: inp.peek, lookDelta: inp.lookDelta });
   }
 
@@ -627,6 +661,18 @@ export function startPractice(o) {
     setSpin(x, y) { setSpin(x, y); return { x: spinX, y: spinY }; },
     setElev(deg) { setElev(deg); return elevDeg; },
     spin: () => ({ x: spinX, y: spinY, elevDeg }),
+    /** The full aim help's last look-ahead (item 40), or null when it is not in use. */
+    preview: () => pvLast,
+    /** What the look-ahead has cost so far: runs, average, highest and last time in ms. */
+    previewStats: () => ({ runs: pvStats.runs, avgMs: pvStats.runs ? pvStats.totalMs / pvStats.runs : 0, maxMs: pvStats.maxMs, lastMs: pvStats.lastMs }),
+    /** Test only: time n look-aheads of the shot as it stands now (pull 0 to 1), in ms each. */
+    previewCost(n, pull) {
+      if (state.phase !== 'aim') return null;
+      const a = shotFrom(yaw, pull, elevDeg, spinX, spinY), times = [];
+      for (let i = 0; i < (n || 20); i++) { const t0 = performance.now(); previewShot(state, data, a, previewLimits); times.push(performance.now() - t0); }
+      times.sort((p, q) => p - q);
+      return { n: times.length, minMs: times[0], medianMs: times[times.length >> 1], maxMs: times[times.length - 1] };
+    },
     /** Test only: show this pull (0 to 1) instead of the mouse's; -1 gives the mouse back. */
     setPull(p) { debugPull = p; },
     /** Test only: true keeps the small view from above away while the balls roll (to measure what it costs). */

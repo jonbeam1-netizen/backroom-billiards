@@ -56,6 +56,10 @@
     "keyPerSec": 0.6,
     "resetAfterShot": true
   },
+  "aimHelp": {
+    "_about": "The aim help lines. Only the 'full' choice uses preview; 'short' and 'none' do not. preview (item 40): the shot is played ahead on a copy of the table with the real rules (spin, raised cue and power included) and the real paths are drawn. maxTicks: the look-ahead never runs longer than this (60 ticks a second). cueAfterLength and cueAfterTicks: the cue ball's line runs on this far (metres) and at most this long (ticks) after its first contact, and always stops at the next ball or cushion it meets. targetLength: the first-hit ball's line, metres from its centre; it also stops at the first cushion or ball it meets. pointSpacing: the drawn lines keep a point only this far (metres) from the last one kept.",
+    "preview": { "maxTicks": 600, "cueAfterLength": 0.4, "cueAfterTicks": 90, "targetLength": 1.6, "pointSpacing": 0.008 }
+  },
   "place": {
     "_about": "How far the cue ball in hand moves per pixel of mouse movement.",
     "metresPerPixel": 0.002

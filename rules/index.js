@@ -6,9 +6,10 @@ import { createGame } from './setup.js';
 import { getConst, simulateTick, allAtRest, strike } from './physics.js';
 import { canPlaceCue, firstContact } from './contact.js';
 import { hashState, cloneState } from './hash.js';
+import { previewShot } from './preview.js';
 import { applyMatchAction, recordShot, judgeShot, shooterTarget, ballsLeft } from './match.js';
 
-export { buildTable, createGame, canPlaceCue, firstContact, hashState, cloneState, shooterTarget, ballsLeft };
+export { buildTable, createGame, canPlaceCue, firstContact, previewShot, hashState, cloneState, shooterTarget, ballsLeft };
 
 /** @typedef {import('./types.js').GameState} GameState */
 /** @typedef {import('./types.js').GameEvent} GameEvent */

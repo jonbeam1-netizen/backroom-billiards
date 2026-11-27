@@ -19,6 +19,8 @@ import { createTracks } from './tracks.js';
  * @property {number} pull           0 to 1
  * @property {'short'|'full'|'none'} aimHelp
  * @property {import('../rules/types.js').Contact|null} contact
+ * @property {import('../rules/preview.js').ShotPreview|null} [preview]   full aim help only: the shot played ahead with the real rules
+ *           (spin, raised cue and power included). When it is missing the full aim help draws the plain straight lines.
  * @property {{x:number, z:number, ok:boolean}|null} ghost   the cue ball in hand
  * @property {boolean} [peek]        the spacebar is held: lift the camera a little (view behind the ball only)
  * @property {number} [lookDelta]    turn the view in place by this much (radians, positive = right) while the balls roll
@@ -37,6 +39,55 @@ function setStrip(m, x1, z1, x2, z2, width, y) {
   m.position.set((x1 + x2) / 2, y, (z1 + z2) / 2);
   m.scale.set(len, width, 1);
   m.rotation.set(-Math.PI / 2, 0, Math.atan2(-dz, dx));
+}
+
+/** A flat line on the felt that follows a list of points (the full aim help's real paths, item 40). */
+function makeRibbon(material) {
+  const m = new THREE.Mesh(new THREE.BufferGeometry(), material);
+  m.visible = false; m.renderOrder = 2; m.frustumCulled = false;
+  return m;
+}
+/**
+ * Builds the ribbon through `pts` (x, z pairs), `width` wide, at height y. Gentle bends get a mitred joint;
+ * a sharp turn (a bounce) gets a clean break instead, so the see-through line never doubles up on itself.
+ */
+function setRibbon(m, pts, width, y) {
+  /** @type {number[]} */
+  const p = [];
+  for (let i = 0; i + 1 < pts.length; i += 2) {
+    const n = p.length;
+    if (n && Math.hypot(pts[i] - p[n - 2], pts[i + 1] - p[n - 1]) < 1e-6) continue;
+    p.push(pts[i], pts[i + 1]);
+  }
+  const n = p.length / 2;
+  m.userData.ok = n >= 2;
+  if (n < 2) { m.visible = false; return; }
+  const hw = width / 2, pos = [], idx = [];
+  let lastOut = -1;
+  const pair = (x, z, nx, nz, sc) => { pos.push(x + nx * hw * sc, y, z + nz * hw * sc, x - nx * hw * sc, y, z - nz * hw * sc); return pos.length / 3 - 2; };
+  for (let i = 0; i < n; i++) {
+    const x = p[2 * i], z = p[2 * i + 1];
+    let ax = 0, az = 0, bx = 0, bz = 0;
+    if (i > 0) { ax = x - p[2 * i - 2]; az = z - p[2 * i - 1]; const l = Math.hypot(ax, az); ax /= l; az /= l; }
+    if (i < n - 1) { bx = p[2 * i + 2] - x; bz = p[2 * i + 3] - z; const l = Math.hypot(bx, bz); bx /= l; bz /= l; }
+    let vin, vout;
+    if (i === 0) vin = vout = pair(x, z, -bz, bx, 1);
+    else if (i === n - 1) vin = vout = pair(x, z, -az, ax, 1);
+    else if (ax * bx + az * bz > 0.5) {
+      let mx = ax + bx, mz = az + bz;
+      const ml = Math.hypot(mx, mz); mx /= ml; mz /= ml;
+      const sc = 1 / Math.max(0.5, mx * ax + mz * az);
+      vin = vout = pair(x, z, -mz, mx, sc);
+    } else { vin = pair(x, z, -az, ax, 1); vout = pair(x, z, -bz, bx, 1); }
+    if (lastOut >= 0) idx.push(lastOut, lastOut + 1, vin, lastOut + 1, vin + 1, vin);
+    lastOut = vout;
+  }
+  m.geometry.dispose();
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setIndex(idx);
+  m.geometry = g;
+  m.visible = true;
 }
 
 /** Where a line from (x, z) along (dx, dz) leaves the playing area, at most maxLen away. */
@@ -72,6 +123,12 @@ export function createGameView(canvas, geom, data, controls, opts = {}) {
   const ring = new THREE.Mesh(new THREE.RingGeometry(R * 0.9, R, 40), lineMat);
   ring.rotation.x = -Math.PI / 2; ring.renderOrder = 2;
   scene.add(cueLine, targetLine, glanceLine, ring);
+  // the full aim help's real paths (item 40): the same colours, widths and height as the straight lines
+  const lineMat2 = lineMat.clone(), hintMat2 = hintMat.clone();
+  lineMat2.side = THREE.DoubleSide; hintMat2.side = THREE.DoubleSide;
+  const cuePath = makeRibbon(lineMat2), cueAfterPath = makeRibbon(lineMat2), targetPath = makeRibbon(hintMat2);
+  scene.add(cuePath, cueAfterPath, targetPath);
+  let shownPreview = null;               // the preview the paths were last built from (rebuilt only when it changes)
 
   const camera = new THREE.PerspectiveCamera(cam.aimFov, 1, 0.02, 30);
   occ.uniforms.occInvView.value = camera.matrixWorld;
@@ -410,8 +467,23 @@ export function createGameView(canvas, geom, data, controls, opts = {}) {
 
       // aim help
       const c = aiming && f.aimHelp !== 'none' ? f.contact : null;
+      const pv = aiming && f.aimHelp === 'full' && f.preview && f.preview.ok ? f.preview : null;
       cueLine.visible = targetLine.visible = glanceLine.visible = ring.visible = false;
-      if (c && c.kind !== 'none') {
+      cuePath.visible = cueAfterPath.visible = targetPath.visible = false;
+      if (pv) {
+        // full aim help: the real paths from the look-ahead (item 40); the view only draws what the rules worked out
+        const y = 0.0015;
+        if (pv !== shownPreview) {
+          shownPreview = pv;
+          setRibbon(cuePath, pv.cueLine, 0.004, y);
+          setRibbon(cueAfterPath, pv.cueAfter, 0.003, y);
+          setRibbon(targetPath, pv.targetLine, 0.004, y);
+        }
+        cuePath.visible = !!cuePath.userData.ok;
+        cueAfterPath.visible = !!cueAfterPath.userData.ok;
+        targetPath.visible = !!targetPath.userData.ok;
+        if (pv.kind !== 'none') { ring.visible = true; ring.position.set(pv.x, y, pv.z); }
+      } else if (c && c.kind !== 'none') {
         const y = 0.0015, full = f.aimHelp === 'full';
         setStrip(cueLine, cb.x + f.dirX * R, cb.z + f.dirZ * R, c.x, c.z, 0.004, y);
         ring.visible = true; ring.position.set(c.x, y, c.z);
@@ -527,6 +599,8 @@ export function createGameView(canvas, geom, data, controls, opts = {}) {
       if (frameEl) { frameEl.style.opacity = '0'; frameEl.style.visibility = 'hidden'; }
       if (miniRT) miniRT.dispose();
       quad.geometry.dispose(); quad.material.dispose();
+      for (const m of [cuePath, cueAfterPath, targetPath]) m.geometry.dispose();
+      lineMat2.dispose(); hintMat2.dispose();
       tracks.dispose();
       stage.dispose(); renderer.dispose();
     },
