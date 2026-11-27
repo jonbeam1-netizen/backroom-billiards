@@ -5,10 +5,12 @@
 // Who sends what:
 //   connection (net/net.js):  hello, welcome, refuse, ping, bye
 //   lobby (online.js):        lobby, start, resume
-//   the table (practice.js):  act, aim, check, needState, state, rematch (and start again for a rematch)
+//   the table (practice.js):  act, aim, check, needState, state, rematch (and start again for a rematch),
+//                             nudgeAsk, nudge (the nudge, item 41)
 
 /** Raised when a message changes shape; both sides must have the same one (the play-test number is checked too). */
-export const PROTOCOL = 3;   // 2: the lobby settings and the createGame opts carry noHitFoul; 3: no 'call' action (the 8 needs no called pocket)
+export const PROTOCOL = 4;   // 2: the lobby settings and the createGame opts carry noHitFoul; 3: no 'call' action (the 8 needs no called pocket);
+                             // 4: the nudge (item 41): the settings and createGame opts carry nudge, new messages nudgeAsk and nudge
 
 /** Join codes: 4 characters, no look-alikes (no I, L, O, 0, 1). */
 export const CODE_LENGTH = 4;
@@ -45,6 +47,7 @@ export function peerIdFor(code) { return PEER_PREFIX + code.toLowerCase(); }
  * @property {'7'|'8'|'9'} size                   table size in feet
  * @property {boolean} allowTop                   the view from above may be used (placing the cue ball always uses it)
  * @property {boolean} noHitFoul                  the cue ball touching no ball is a foul (default: not a foul)
+ * @property {boolean} nudge                      the nudge joke (W A S D while the balls roll) works in this match (default: off)
  */
 export const SETTING_CHOICES = {
   aimHelp: ['short', 'full', 'none'],
@@ -52,9 +55,10 @@ export const SETTING_CHOICES = {
   size: ['9', '8', '7'],
   allowTop: [true, false],
   noHitFoul: [false, true],
+  nudge: [false, true],
 };
 /** @returns {MatchSettings} */
-export function defaultSettings() { return { aimHelp: 'short', foulRule: 'anywhere', size: '9', allowTop: true, noHitFoul: false }; }
+export function defaultSettings() { return { aimHelp: 'short', foulRule: 'anywhere', size: '9', allowTop: true, noHitFoul: false, nudge: false }; }
 /**
  * Settings from a message or a save, with anything odd replaced by the default.
  * @param {any} s
@@ -68,6 +72,7 @@ export function cleanSettings(s) {
     size: SETTING_CHOICES.size.includes(String(o.size)) ? String(o.size) : d.size,
     allowTop: typeof o.allowTop === 'boolean' ? o.allowTop : d.allowTop,
     noHitFoul: typeof o.noHitFoul === 'boolean' ? o.noHitFoul : d.noHitFoul,   // missing in a match kept from before: the default
+    nudge: typeof o.nudge === 'boolean' ? o.nudge : d.nudge,                   // missing in a match kept from before: off
   };
 }
 
@@ -108,6 +113,12 @@ const FIELDS = {
   state: { game: 'number', seq: 'number', state: 'object', queue: 'array' },
   /** both ways: I pressed Rematch (want true) */
   rematch: { game: 'number', want: 'boolean' },
+  /** friend -> host: I pressed W A S D (the nudge, item 41) during the roll of action `seq`; dirX, dirZ is the table
+   *  direction my view made of the key (one of the four). The host decides */
+  nudgeAsk: { game: 'number', seq: 'number', dirX: 'number', dirZ: 'number' },
+  /** host -> friend: a nudge by player `by`, the way dirX, dirZ, was applied on the host at `tick`, during the roll of
+   *  action `seq`. The friend applies it at that same tick (playing the roll again from the strike if it is already past it) */
+  nudge: { game: 'number', seq: 'number', tick: 'number', by: 'number', dirX: 'number', dirZ: 'number' },
 };
 /** The message type names, for code that wants to spell them once. */
 export const MSG = Object.freeze(Object.fromEntries(Object.keys(FIELDS).map(k => [k, k])));
@@ -148,4 +159,6 @@ export const make = {
   needState: game => ({ type: 'needState', game }),
   state: (game, seq, state, queue) => ({ type: 'state', game, seq, state, queue }),
   rematch: (game, want) => ({ type: 'rematch', game, want }),
+  nudgeAsk: (game, seq, dirX, dirZ) => ({ type: 'nudgeAsk', game, seq, dirX, dirZ }),
+  nudge: (game, seq, tick, by, dirX, dirZ) => ({ type: 'nudge', game, seq, tick, by, dirX, dirZ }),
 };

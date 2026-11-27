@@ -153,6 +153,7 @@ async function openPractice(mode, link) {
       input = createInput(gameCanvas, controls);
       input.bindButton($('viewBtn'), 'switchView');
       input.bindButton($('aimHelpBtn'), 'aimHelp');
+      input.bindButton($('nudgeBtn'), 'nudgeSetting');
       input.bindButton($('rackBtn'), 'rack');
       input.bindButton($('exitBtn'), 'exit');
       input.bindButton($('overTitleBtn'), 'exit');
@@ -168,10 +169,11 @@ async function openPractice(mode, link) {
       canvas: gameCanvas, data: { table, physics }, controls, tracks, input, look: look(),
       mode, online: link, foulRule: query.get('foul') === 'line' ? 'behindLine' : 'anywhere',   // the local match: ?foul=line (online: the lobby setting)
       noHitFoul: query.get('nohit') === 'foul',   // the local match: ?nohit=foul makes the cue ball hitting nothing a foul (online: the lobby setting)
+      nudge: query.get('nudge') === '1',          // the local match: ?nudge=1 turns the nudge on (online: the lobby setting; practice: its button)
       hud: { matchBar: $('matchBar'), matchMsg: $('matchMsg'), overPanel: $('overPanel'), overText: $('overText'), overWhy: $('overWhy'),
         overWait: $('overWait'), rematchBtn: $('rematchBtn'),
         who: [$('who0'), $('who1')], grp: [$('grp0'), $('grp1')], rackBtn: $('rackBtn'),
-        hint: $('hint'), power: $('power'), powerFill: $('powerFill'), aimHelpBtn: $('aimHelpBtn'), viewBtn: $('viewBtn'),
+        hint: $('hint'), power: $('power'), powerFill: $('powerFill'), aimHelpBtn: $('aimHelpBtn'), viewBtn: $('viewBtn'), nudgeBtn: $('nudgeBtn'),
         spinBox: $('spinBox'), spinPad: $('spinPad'), spinDot: $('spinDot'), elevText: $('elevText'), elevSlider: /** @type {HTMLInputElement} */ ($('elevSlider')),
         miniFrame: $('miniFrame') },
       onExit: () => { if (online) online.tableClosed(); showTitle(); },
@@ -197,7 +199,7 @@ online = createOnline({
     hostBtn: $('hostBtn'), joinBtn: $('joinBtn'), resumeBtn: $('resumeBtn'),
     joinBox: $('joinBox'), codeBox: $('codeBox'), joinGoBtn: $('joinGoBtn'), joinBackBtn: $('joinBackBtn'),
     lobby: $('lobby'), lobbyCode: $('lobbyCode'), lobbyHost: $('lobbyHost'), lobbyFriend: $('lobbyFriend'),
-    setAim: $('setAim'), setFoul: $('setFoul'), setSize: $('setSize'), setTop: $('setTop'), setNoHit: $('setNoHit'),
+    setAim: $('setAim'), setFoul: $('setFoul'), setSize: $('setSize'), setTop: $('setTop'), setNoHit: $('setNoHit'), setNudge: $('setNudge'),
     lobbyNote: $('lobbyNote'), lobbyStatus: $('lobbyStatus'), startBtn: $('startBtn'), leaveBtn: $('leaveBtn'),
   },
   openTable: link => openPractice('online', link),

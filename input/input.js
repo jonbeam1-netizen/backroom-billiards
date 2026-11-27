@@ -29,6 +29,11 @@
 //   the mouse is captured for it (a click on the table captures it again if the browser asked for one); where the
 //   browser refuses, the free cursor works like the aiming stick, but only after it has been moved, so the view
 //   never turns by itself.
+// - Nudge (item 41): W A S D set the hit point while aiming ('aim' or 'point' mode), as before. In any other mode
+//   (the balls roll: 'off', or 'watch' online) a fresh press gives `nudge:up`, `nudge:down`, `nudge:left` or
+//   `nudge:right` in `pressed` (the way the key points on the screen), never while typing or while a panel is open,
+//   once per press (auto-repeat gives nothing). A key held across a change of mode does nothing until pressed
+//   again. The table turns the screen way into a table way (view.screenWayToTable) and the rules decide.
 
 /** True while the player is typing in a text field: the table's keys must not react then. @param {Event} e */
 function typing(e) {
@@ -136,6 +141,8 @@ export function createInput(target, controls) {
   /** @type {string[]} */
   let pressed = [];
   const keyNames = { v: 'switchView', V: 'switchView' };
+  /** W A S D: the way each key points on the screen (up = away from the camera / up the screen). */
+  const WASD = { w: 'up', W: 'up', s: 'down', S: 'down', a: 'left', A: 'left', d: 'right', D: 'right' };
 
   // spin and cue angle: where the tip hits the cue ball, and how far the butt of the cue is raised
   let spinDX = 0, spinDY = 0, elevDelta = 0;
@@ -199,6 +206,9 @@ export function createInput(target, controls) {
     const m = paused ? 'off' : asked;
     if (m === mode) return;
     mode = m; dropHold(); confirm = false; shoot = null;
+    // W A S D mean the hit point only while aiming and the nudge otherwise: a key held across the change does
+    // nothing until it is pressed again
+    spinUp = spinDown = spinLeft = spinRight = false;
     if (mode === 'aim') { if (wanted) capture(); } else uncapture();
   }
 
@@ -268,10 +278,18 @@ export function createInput(target, controls) {
     if (e.key === 'Shift') fine = true;
     else if (e.key === 'ArrowLeft') left = true;
     else if (e.key === 'ArrowRight') right = true;
-    else if (e.key === 'w' || e.key === 'W') spinUp = true;
-    else if (e.key === 's' || e.key === 'S') spinDown = true;
-    else if (e.key === 'a' || e.key === 'A') spinLeft = true;
-    else if (e.key === 'd' || e.key === 'D') spinRight = true;
+    else if (WASD[e.key]) {
+      const k = WASD[e.key];
+      if (mode === 'aim' || mode === 'point') {
+        // aiming: W A S D move the hit point while held. Only a fresh press counts, so a key still held from the
+        // roll (or from before a panel) does not start moving the dot by itself.
+        if (!e.repeat) { if (k === 'up') spinUp = true; else if (k === 'down') spinDown = true; else if (k === 'left') spinLeft = true; else spinRight = true; }
+      } else if (!e.repeat && tableOn && !paused) {
+        // not aiming (the balls roll, or the other player's turn online): the same keys nudge (item 41), one per
+        // fresh press. The table turns the screen way into a table way and the rules decide whether it counts.
+        pressed.push('nudge:' + k);
+      }
+    }
     else if ((e.key === 'f' || e.key === 'F') && !e.repeat && mode !== 'off') {
       // F switches fine aim on and off at the table (the same switch as on the settings screen)
       fineLock = !fineLock;

@@ -45,6 +45,11 @@
     "gap": 0.0002,
     "jitter": 0.00006
   },
+  "nudge": {
+    "_about": "The nudge (HANDOFF item 41, W A S D while the balls roll, a joke button, off unless the host or the practice button turns it on). The player picks one of four ways (+X, -X, +Z, -Z: the key's way on the screen); every ball on the table gets kickSpeed (m/s) that way relative to the table, with no spin (the table was shoved the other way and the balls stayed behind), and then slides, rolls and settles through the normal physics. Tuned, not measured: a ball at rest ends up about 3 cm from where it was. waitTicks: how long (ticks, 60 a second) each player must wait between nudges; each player has their own wait.",
+    "kickSpeed": 0.105,
+    "waitTicks": 120
+  },
   "sim": {
     "_about": "How the rules step time. maxMovePerSubstep: no ball moves more than this share of its radius in one substep (stops tunnelling). maxSubsteps: cap per tick. maxSolverPasses: how many times per substep the hits are re-checked so a hit can pass through a frozen row of balls. restSpeed (m/s) and restSpin (rad/s): below these a ball on the felt is stopped dead. potDepth: a ball whose centre is over a hole and lower than this many radii above the felt is potted.",
     "maxMovePerSubstep": 0.25,

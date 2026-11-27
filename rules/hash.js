@@ -40,6 +40,9 @@ export function cloneState(state) {
       cuePotted: sh.cuePotted, cueOff: sh.cueOff, target: sh.target,
     };
   }
+  // the nudge (item 41): only on a state that has it switched on
+  const n = /** @type {any} */ (state).nudge;
+  if (n) /** @type {any} */ (out).nudge = { next: [n.next[0], n.next[1]] };
   return out;
 }
 
@@ -111,6 +114,14 @@ export function hashState(state) {
     addNumber(sh.cuePotted ? 1 : 0);
     addNumber(sh.cueOff ? 1 : 0);
     addString(sh.target);
+  }
+  // The nudge (item 41), only when it is switched on: a state without it (the nudge off, and every game and
+  // saved match from before item 41) hashes exactly as before.
+  const n = /** @type {any} */ (state).nudge;
+  if (n) {
+    addString('nudge');
+    addNumber(n.next[0]);
+    addNumber(n.next[1]);
   }
   return hex(h1) + hex(h2);
 }

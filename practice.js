@@ -11,8 +11,16 @@
 //   different, the friend takes over the host's whole state (the host's state is the final word).
 // - The shooter sends the cue (aim, power, hit point, cue angle, cue ball in hand) about 12 times a second; the
 //   other PC draws it from that, smoothed.
+// - The nudge (item 41, W A S D while the balls roll) happens in the middle of a roll, so it cannot wait for a rest
+//   like the other actions. Each PC turns the key into a table way from its own camera. The host is the referee:
+//   the host's own nudge, and the friend's (sent as nudgeAsk), are applied on the host's
+//   next rolling tick if the rules allow them; the host then tells the friend the tick (nudge message). The friend
+//   applies it at that same tick: if the friend is not there yet it waits for it, and if the friend is already past
+//   it, the friend plays the roll again from the strike (a copy kept at the strike) with the nudge in it, up to
+//   where it was. So both PCs end on the same state. If that cannot be done (it is too late), the friend asks for
+//   the host's state as after any difference.
 import * as rules from './rules/index.js';
-import { buildTable, createGame, step, firstContact, previewShot, canPlaceCue, hashState, runReplay } from './rules/index.js';
+import { buildTable, createGame, step, firstContact, previewShot, canPlaceCue, hashState, cloneState, runReplay } from './rules/index.js';
 import { createGameView } from './view/gameView.js';
 import { playEvents } from './audio/audio.js';
 import { make } from './net/protocol.js';
@@ -48,6 +56,7 @@ const AIM_HELP = ['short', 'full', 'none'];
  * @param {'practice'|'match'|'online'} [o.mode]
  * @param {'anywhere'|'behindLine'} [o.foulRule]   match only: where the cue ball may go after a foul
  * @param {boolean} [o.noHitFoul]                   local match only: the cue ball hitting nothing is a foul (online: the lobby setting)
+ * @param {boolean} [o.nudge]                       local match only: the T nudge is on (online: the lobby setting; practice: its button)
  * @param {OnlineLink} [o.online]                   online only
  * @param {{quality?:'low'|'medium'|'high', felt?:'green'|'blue'|'red'}} [o.look]   this player's picture settings (never sent)
  * @param {Object} [o.tracks]                       data/tracks.json: the tracks hard shots leave on the felt (drawing only)
@@ -115,11 +124,43 @@ export function startPractice(o) {
   function rack(breaker) {
     const opts = { size, seed: (Date.now() % 4294967296) >>> 0, mode: isMatch ? 'match' : 'practice' };
     if (isMatch) { opts.foulRule = o.foulRule || 'anywhere'; opts.noHitFoul = o.noHitFoul === true; if (breaker === 0 || breaker === 1) opts.breaker = breaker; }
+    if (isMatch ? o.nudge === true : practiceNudge) opts.nudge = true;   // practice: a new rack keeps the button's choice
     newGame(opts);
   }
   function showButtons() {
     hud.aimHelpBtn.textContent = 'Aim help: ' + AIM_HELP[aimHelp];
     hud.viewBtn.textContent = view.getMode() === 'top' ? 'View: from above (V)' : 'View: behind the ball (V)';
+    showNudgeBtn();
+  }
+  // ---- the nudge (item 41, W A S D while the balls roll): on in this game when the state has its nudge record
+  let practiceNudge = false;   // practice: the button's choice, kept for the next rack
+  const nudgeOn = () => !!(state && state.nudge);
+  function showNudgeBtn() {
+    if (!hud.nudgeBtn) return;
+    const text = 'Nudge (W A S D): ' + (nudgeOn() ? 'on' : 'off');
+    if (hud.nudgeBtn.textContent !== text) hud.nudgeBtn.textContent = text;
+  }
+  const nudgeStats = { pressed: 0, asked: 0, rollbacks: 0, waited: 0, heals: 0 };
+  /** Every nudge the rules took on this PC, once each: "game:action:tick:player" -> its direction. */
+  const nudgesSeen = new Map();
+  function noteNudges(events, t) {
+    for (const e of events) if (e.type === 'nudge') nudgesSeen.set((online ? sync.game : 0) + ':' + (online ? sync.applied : 0) + ':' + t + ':' + e.player, e.dirX + ',' + e.dirZ);
+  }
+  /**
+   * W A S D was pressed while not aiming: a nudge the way the key points on the screen. It does nothing at all
+   * unless a shot is in play and the rules would take it from this player.
+   * @param {'up'|'down'|'left'|'right'} way
+   */
+  function pressNudge(way) {
+    if (!nudgeOn() || state.phase !== 'rolling') return false;
+    const by = online ? me : isMatch ? state.turn : 0;   // the local match has one keyboard: it nudges for the shooter
+    if (!rules.canNudge(state, by)) return false;
+    const d = view.screenWayToTable(way);
+    nudgeStats.pressed++;
+    if (!online) { pending.push({ type: 'nudge', by, dirX: d.dirX, dirZ: d.dirZ }); return true; }
+    if (me === 0) { sync.nudgeAsks.push({ seq: sync.applied, by: 0, dirX: d.dirX, dirZ: d.dirZ }); return true; }
+    nudgeStats.asked++;
+    return online.send(make.nudgeAsk(sync.game, sync.applied, d.dirX, d.dirZ));
   }
   /** The speed a pull of 0 to 1 gives the cue ball, with the cue raised `deg` degrees (this player's own cue when left out). */
   function pullToSpeed(pull, deg = elevDeg) {
@@ -245,11 +286,15 @@ export function startPractice(o) {
       if (e.type === 'settled' && state.phase === 'place') startPlacing();
     }
   }
-  /** One tick of the rules with these actions. */
+  /** One tick of the rules with these actions. Returns the tick's events. */
   function tick(acts) {
     savePrev();
-    for (const a of acts) record.shots.push({ tick: state.tick, action: a });
-    onEvents(step(state, data, acts), acts.find(a => a && a.type === 'shoot') || null);
+    const t = state.tick;
+    for (const a of acts) record.shots.push({ tick: t, action: a });
+    const events = step(state, data, acts);
+    noteNudges(events, t);
+    onEvents(events, acts.find(a => a && a.type === 'shoot') || null);
+    return events;
   }
 
   function frame(ms) {
@@ -271,6 +316,8 @@ export function startPractice(o) {
       if (name === 'switchView' && !ghost && allowTop && !(online && state.phase === 'place')) { view.setMode(view.getMode() === 'top' ? 'aim' : 'top'); showButtons(); }
       else if (name === 'aimHelp' && !online) { aimHelp = (aimHelp + 1) % AIM_HELP.length; showButtons(); }
       else if (name === 'rack' && !isMatch) rack();
+      else if (name.startsWith('nudge:')) pressNudge(/** @type {any} */ (name.slice(6)));
+      else if (name === 'nudgeSetting' && !isMatch) { practiceNudge = !practiceNudge; pending.push({ type: 'nudgeSetting', on: practiceNudge }); }
       else if (name === 'exit') { if (online) online.leave(); stop(); o.onExit(); return; }
     }
 
@@ -339,7 +386,9 @@ export function startPractice(o) {
     hud.powerFill.style.width = (pull * 100).toFixed(1) + '%';
     const peekHint = fromAbove ? '' : ' · Space (hold): peek';
     const waiting = online && !free ? watchHint() : '';
-    hud.hint.textContent = state.phase === 'rolling' && inp.looking
+    showNudgeBtn();
+    const nudgeHint = nudgeOn() && state.phase === 'rolling' ? 'W A S D: nudge the table' : '';
+    const hintText = state.phase === 'rolling' && inp.looking
       ? (inp.lookCaptured ? 'Mouse: look around' : 'Mouse left or right of the middle: look around') + peekHint
       : online && !free ? waiting + (waiting && state.phase === 'aim' ? peekHint : '')
       : state.phase === 'place'
@@ -349,6 +398,9 @@ export function startPractice(o) {
             : (inp.pointing ? 'Aiming: the cue points at the mouse' : inp.free ? 'Aiming: mouse left or right of the middle turns' : 'Aiming: move the mouse')
               + ' · Left or right click: back to power') + peekHint
           : '';
+    // the nudge is only for while the balls roll, so its line shows only then
+    const fullHint = nudgeHint ? (hintText ? hintText + ' · ' + nudgeHint : nudgeHint) : hintText;
+    if (hud.hint.textContent !== fullHint) hud.hint.textContent = fullHint;
 
     view.render({ state, prev, alpha: acc / TICK, dt, dirX, dirZ, elevSin: e.sin, elevCos: e.cos, offX, offY,
       pull, aimHelp: AIM_HELP[aimHelp], contact, preview, ghost: state.phase === 'place' ? shownGhost : null,
@@ -395,12 +447,15 @@ export function startPractice(o) {
   if (online) labels.forEach((b, i) => { if (b) b.textContent = NAMES[i]; });
   hud.matchBar.hidden = !isMatch; hud.matchMsg.hidden = !isMatch; hud.rackBtn.hidden = isMatch;
   hud.aimHelpBtn.hidden = !!online; hud.viewBtn.hidden = !allowTop;
+  if (hud.nudgeBtn) hud.nudgeBtn.hidden = isMatch;   // practice only; a match has the host's lobby setting (or ?nudge=1 at this PC)
+  showNudgeBtn();
   hud.overPanel.hidden = true; hud.overWait.hidden = true; hud.rematchBtn.disabled = false;
 
   function stop() {
     if (!running) return;
     hud.matchBar.hidden = true; hud.matchMsg.hidden = true; hud.overPanel.hidden = true; hud.rackBtn.hidden = false;
     hud.aimHelpBtn.hidden = false; hud.viewBtn.hidden = false; hud.overWait.hidden = true; hud.rematchBtn.disabled = false;
+    if (hud.nudgeBtn) hud.nudgeBtn.hidden = true;
     labels.forEach((b, i) => { if (b) b.textContent = oldLabels[i]; });
     running = false;
     input.setMode('off'); input.setTable(false); input.release();
@@ -426,6 +481,13 @@ export function startPractice(o) {
     aimIn: null, aimInCount: 0,
     shown: { yaw: 0, pull: 0, offX: 0, offY: 0, elevDeg: minElev, ghost: null },
     rematch: [false, false],
+    // the T nudge (item 41)
+    /** @type {{seq:number, by:number}[]} */
+    nudgeAsks: [],     // host: nudges pressed (here, or asked by the friend) for the roll of action seq, not yet applied
+    /** @type {{seq:number, tick:number, by:number}[]} */
+    nudges: [],        // friend: nudges the host applied, waiting for this PC to reach their tick
+    /** @type {{seq:number, state:Object, acts:{tick:number, action:Object}[]}|null} */
+    rollBase: null,    // friend: the state at the start of the roll now in play, and every action applied in it since
   };
 
   /** This player may act now: their turn, the table at rest, nothing waiting, and the friend connected. */
@@ -437,6 +499,7 @@ export function startPractice(o) {
     sync.game = game; sync.known = 0; sync.applied = 0; sync.restDone = -1;
     sync.queue = []; sync.mine = []; sync.myHash.clear(); sync.hostHash.clear();
     sync.aimIn = null; sync.rematch = [false, false];
+    sync.nudgeAsks = []; sync.nudges = []; sync.rollBase = null;
     newGame(opts);
     sync.shown.yaw = 0; sync.shown.ghost = null;
   }
@@ -447,13 +510,15 @@ export function startPractice(o) {
   function onlineTicks(dt) {
     acc += dt;
     while (acc >= TICK) {
-      if (state.phase === 'rolling') tick([]);
+      if (state.phase === 'rolling') rollingTick();
       else if (sync.queue.length) {
         const q = sync.queue.shift();
         sync.applied = q.seq;
         // an action is only used on its player's turn; both PCs check this on the same state, so they agree
         if (state.turn === q.by && state.phase !== 'over') {
           if (q.by !== me) showRemoteAction(q);
+          // friend: keep the state at the strike, to play the roll again if a nudge comes in late
+          if (me === 1 && q.action && q.action.type === 'shoot') sync.rollBase = { seq: q.seq, state: cloneState(state), acts: [{ tick: state.tick, action: q.action }] };
           tick([q.action]);
         } else { restPoint(); continue; }
       } else { acc = 0; savePrev(); break; }
@@ -461,6 +526,80 @@ export function startPractice(o) {
       if (state.phase !== 'rolling') restPoint();
     }
     if (state.phase !== 'rolling') restPoint();
+  }
+  /**
+   * One tick of a roll, online. Host: with the nudges pressed for this roll (its own and the friend's), and the
+   * friend is told the tick of each nudge the rules took. Friend: with the host's nudges that belong to this tick.
+   */
+  function rollingTick() {
+    const t = state.tick, seq = sync.applied;
+    if (me === 0) {
+      const acts = [];
+      sync.nudgeAsks = sync.nudgeAsks.filter(n => {
+        if (n.seq === seq) { acts.push({ type: 'nudge', by: n.by, dirX: n.dirX, dirZ: n.dirZ }); return false; }
+        return n.seq > seq;   // an ask for a roll that is over is dropped
+      });
+      const events = tick(acts);
+      for (const e of events) if (e.type === 'nudge') online.send(make.nudge(sync.game, seq, t, e.player, e.dirX, e.dirZ));
+      return;
+    }
+    const acts = [];
+    sync.nudges = sync.nudges.filter(n => {
+      if (n.seq === seq && n.tick === t) { acts.push({ type: 'nudge', by: n.by, dirX: n.dirX, dirZ: n.dirZ }); return false; }
+      return n.seq > seq || (n.seq === seq && n.tick > t);
+    });
+    if (sync.rollBase && sync.rollBase.seq === seq) for (const a of acts) sync.rollBase.acts.push({ tick: t, action: a });
+    tick(acts);
+  }
+  /**
+   * Friend: the host applied a nudge. Use it at its tick: wait for that tick, or, when this PC is already past it,
+   * play the roll again from the strike with the nudge in it. When neither can be done, take the host's state.
+   * @param {{seq:number, tick:number, by:number}} n
+   */
+  function nudgeFromHost(n) {
+    if (n.seq > sync.applied) { sync.nudges.push(n); nudgeStats.waited++; return; }        // that shot has not started here yet
+    if (n.seq === sync.applied && state.phase === 'rolling' && n.tick >= state.tick) { sync.nudges.push(n); nudgeStats.waited++; return; }
+    if (n.seq === sync.applied && n.tick < state.tick && rollAgainWith(n)) { nudgeStats.rollbacks++; return; }
+    nudgeStats.heals++;
+    console.info('[online] a nudge from the host came too late to play again (action ' + n.seq + ', tick ' + n.tick + '): taking the host\'s state');
+    online.send(make.needState(sync.game));
+  }
+  /**
+   * Friend: play the roll in play again from the strike, with nudge `n` added at its tick, up to the tick this PC
+   * had reached (or until the balls rest, as both PCs stop ticking there).
+   * @param {{seq:number, tick:number, by:number}} n
+   * @returns {boolean} false when there is no copy of this roll's start to play from
+   */
+  function rollAgainWith(n) {
+    const base = sync.rollBase;
+    if (!base || base.seq !== n.seq || n.tick < base.state.tick) return false;
+    const target = state.tick;
+    let at = base.acts.length;
+    while (at > 0 && base.acts[at - 1].tick > n.tick) at--;
+    const nudge = { type: 'nudge', by: n.by, dirX: n.dirX, dirZ: n.dirZ };
+    base.acts.splice(at, 0, { tick: n.tick, action: nudge });
+    const s = cloneState(base.state);
+    const shown = [];
+    let k = 0;
+    for (let guard = 0; guard < 60 * 600; guard++) {
+      while (k < base.acts.length && base.acts[k].tick < s.tick) k++;
+      const acts = [];
+      while (k < base.acts.length && base.acts[k].tick === s.tick) acts.push(base.acts[k++].action);
+      const t = s.tick;
+      const ev = step(s, data, acts);
+      if (t >= n.tick) { for (const e of ev) shown.push(e); noteNudges(ev, t); }   // what happened before the nudge has been seen already
+      if (s.phase !== 'rolling' || s.tick >= target) break;
+    }
+    state = s;
+    // the record for the replay check: the nudge in its place
+    let r = record.shots.length;
+    while (r > 0 && record.shots[r - 1].tick > n.tick) r--;
+    record.shots.splice(r, 0, { tick: n.tick, action: nudge });
+    sync.restDone = -1;                 // fingerprint this roll again when it rests
+    sync.myHash.delete(n.seq);
+    savePrev();
+    onEvents(shown, null);
+    return true;
   }
   /** The other player's action is being applied here: their cue strokes, and the aim stays where they shot. */
   function showRemoteAction(q) {
@@ -539,6 +678,10 @@ export function startPractice(o) {
     sync.myHash.clear();
     for (const k of [...sync.hostHash.keys()]) if (k <= seq) sync.hostHash.delete(k);
     sync.adopted++;
+    // the nudge: the host's state already holds every nudge it applied so far; a later one may still need the roll
+    // played again, so a rolling state taken over becomes the new start of the roll
+    sync.nudges = []; sync.nudgeAsks = [];
+    sync.rollBase = me === 1 && state.phase === 'rolling' ? { seq, state: cloneState(state), acts: [] } : null;
     pending = []; acc = 0;
     savePrev(); view.snapCamera();
     if (state.phase === 'place') { if (!ghost) startPlacing(); } else if (ghost || viewBeforePlace) endPlacing();
@@ -557,6 +700,7 @@ export function startPractice(o) {
   function maybeRematch() {
     if (me !== 0 || !sync.rematch[0] || !sync.rematch[1] || state.phase !== 'over') return;
     const opts = { size, seed: (Date.now() % 4294967296) >>> 0, mode: 'match', foulRule: online.settings.foulRule, noHitFoul: online.settings.noHitFoul === true, breaker: state.winner };
+    if (online.settings.nudge === true) opts.nudge = true;
     const game = sync.game + 1;
     online.send(make.start(game, opts, online.settings));
     startOnlineGame(game, opts);
@@ -606,6 +750,10 @@ export function startPractice(o) {
       online.send(make.state(sync.game, s.seq, s.state, s.queue));
     } else if (msg.type === 'state' && me === 1) adoptState(msg.state, msg.seq, msg.queue);
     else if (msg.type === 'rematch') { sync.rematch[1 - me] = !!msg.want; maybeRematch(); }
+    else if (msg.type === 'nudgeAsk' && me === 0) {
+      // the friend nudged: taken on the next rolling tick of that roll (the rules check the wait and the way), else dropped
+      if (msg.seq >= sync.applied) sync.nudgeAsks.push({ seq: msg.seq, by: 1, dirX: msg.dirX, dirZ: msg.dirZ });
+    } else if (msg.type === 'nudge' && me === 1 && (msg.by === 0 || msg.by === 1)) nudgeFromHost({ seq: msg.seq, tick: msg.tick, by: msg.by, dirX: msg.dirX, dirZ: msg.dirZ });
   }
   /** Carry on from a 'resume' message or a saved match. */
   function carryOn(r) {
@@ -692,6 +840,14 @@ export function startPractice(o) {
     /** Test only: move the cue ball in hand as the mouse would. */
     moveGhost(x, z) { if (ghost) { ghost.x = x; ghost.z = z; ghost.ok = canPlaceCue(state, data, x, z); } return ghost; },
     message: () => message,
+    /** The nudge (item 41): as if W A S D ('up', 'down', 'left', 'right') were pressed now. False when it does nothing. */
+    nudge(way) { return pressNudge(way || 'up'); },
+    /** Practice: the table's nudge button (on true / false). Applied on the next tick. */
+    setNudge(on) { if (isMatch) return false; practiceNudge = !!on; pending.push({ type: 'nudgeSetting', on: practiceNudge }); return true; },
+    /** The nudge: on or off, the waits, what this PC did, and every nudge the rules took here ("game:action:tick:player" -> way). */
+    nudgeInfo: () => ({ on: nudgeOn(), next: state.nudge ? state.nudge.next.slice() : null, stats: { ...nudgeStats }, seen: [...nudgesSeen.entries()],
+      ways: { up: view.screenWayToTable('up'), down: view.screenWayToTable('down'), left: view.screenWayToTable('left'), right: view.screenWayToTable('right') },
+      jolts: view.info().nudges }),
     setView(m) { if (m !== 'top' || allowTop) view.setMode(m); showButtons(); return view.getMode(); },
     setAimHelp(name) { if (!online) aimHelp = Math.max(0, AIM_HELP.indexOf(name)); showButtons(); return AIM_HELP[aimHelp]; },
     rack,

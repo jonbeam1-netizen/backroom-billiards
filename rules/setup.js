@@ -3,6 +3,7 @@
 import { buildTable } from './table.js';
 import { getConst } from './physics.js';
 import { random } from './rng.js';
+import { newNudge } from './nudge.js';
 
 /** @typedef {import('./types.js').Ball} Ball */
 /** @typedef {import('./types.js').GameState} GameState */
@@ -30,8 +31,10 @@ export function makeBall(id, x, y, z) {
  * Practice: the cue ball sits on the head spot, phase 'aim'.
  * Match (opts.mode 'match'): the extra MatchState fields; the breaker (opts.breaker, or a coin flip from the
  * seeded generator, drawn after the rack) has the cue ball in hand behind the line.
+ * The nudge (item 41): opts.nudge exactly true gives the state its `nudge` record (both modes); otherwise the
+ * state has none and the nudge is off.
  * @param {{table:Object, physics:Object}} data
- * @param {{size?:string, seed?:number, mode?:'practice'|'match', foulRule?:'anywhere'|'behindLine', noHitFoul?:boolean, breaker?:number}} opts
+ * @param {{size?:string, seed?:number, mode?:'practice'|'match', foulRule?:'anywhere'|'behindLine', noHitFoul?:boolean, nudge?:boolean, breaker?:number}} opts
  * @returns {GameState}
  */
 export function createGame(data, opts) {
@@ -47,6 +50,7 @@ export function createGame(data, opts) {
   };
   state.balls = makeRack(state, geo, k);
   if (o.mode === 'match') setUpMatch(state, o);
+  if (o.nudge === true) /** @type {any} */ (state).nudge = newNudge();
   return state;
 }
 

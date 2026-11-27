@@ -153,6 +153,11 @@ export function createGameView(canvas, geom, data, controls, opts = {}) {
   const peekCfg = cam.peek || { rise: 0, over: 0, lookAhead: 0, seconds: 0.3 };
   let lookYaw = 0;                       // how far the view is turned from the aim, radians (positive = right)
   let peekX = 0, peekV = 0;              // how far into the peek (0 to 1) and how fast it is moving
+  // the nudge (item 41): the table seems to jerk and settle. Drawing only: the main camera is moved the other way
+  // for the frame's picture and put back at once, so aiming, the cursor and the small view from above never see it.
+  const nudgeCfg = cam.nudge || { jerk: -1, shift: 0.007, hz: 6, decay: 13, seconds: 0.35 };  /** @type {{t:number, dx:number, dz:number}|null} */
+  let jolt = null;
+  let joltCount = 0, joltNow = 0;
 
   // ---------------------------------------------------------------- the small view from above (item 32)
   // A second camera draws the table from above into a small picture (a render target), which is then laid over
@@ -402,6 +407,11 @@ export function createGameView(canvas, geom, data, controls, opts = {}) {
         if (e.type === 'pocket' && e.ball >= 0 && e.ball < 16) startDrop(e);
         else if (e.type === 'cueStrike' && shot && e.ball === 0) tracks.add(e.x, e.z, shot.dirX, shot.dirZ, e.speed || 0);
         else if (e.type === 'rerack') tracks.clear();
+        else if (e.type === 'nudge') {
+          // the event's way is the balls'; the table jumps the way nudgeCfg.jerk says (-1: the other way)
+          const j = nudgeCfg.jerk === 1 ? 1 : -1;
+          jolt = { t: 0, dx: j * (e.dirX || 0), dz: j * (e.dirZ || 0) }; joltCount++;
+        }
       }
     },
     /** A new rack or a new game: clean felt. */
@@ -423,6 +433,25 @@ export function createGameView(canvas, geom, data, controls, opts = {}) {
       if (Math.abs(d.y) < 1e-6) return null;
       const t = (R - o.y) / d.y;
       return t > 0 ? { x: o.x + d.x * t, z: o.z + d.z * t } : null;
+    },
+    /**
+     * The nudge (item 41): a way on the screen ('up' = away from the camera / up the screen, 'down', 'left', 'right')
+     * as the nearest of the four table directions, from the camera as it was last drawn (behind the ball, turned by
+     * the look-around during the roll, or from above).
+     * Screen up on the felt: the camera's up axis plus its forward axis, laid flat. Looking down the table behind the
+     * ball, the forward axis gives it; straight from above (forward points down) the up axis gives it, the way the
+     * table lies on the screen. Screen right: the camera's right axis, laid flat. Then the bigger of the X and Z parts wins.
+     * @param {'up'|'down'|'left'|'right'} way
+     * @returns {{dirX:number, dirZ:number}}
+     */
+    screenWayToTable(way) {
+      const e = camera.matrixWorld.elements;
+      let x, z;
+      if (way === 'left' || way === 'right') { x = e[0]; z = e[2]; }   // the right axis
+      else { x = e[4] - e[8]; z = e[6] - e[10]; }                    // up axis + forward axis (forward is -Z of the camera)
+      if (way === 'left' || way === 'down') { x = -x; z = -z; }
+      if (Math.abs(x) >= Math.abs(z)) return { dirX: x >= 0 ? 1 : -1, dirZ: 0 };
+      return { dirX: 0, dirZ: z >= 0 ? 1 : -1 };
     },
     /** Where a point on the table (at ball height) is on the screen, in pixels from the canvas's top left. */
     tableToScreen(x, z) {
@@ -564,7 +593,23 @@ export function createGameView(canvas, geom, data, controls, opts = {}) {
         }
       }
 
+      // the nudge's jolt: a quick damped shake, first toward the shove. The camera goes the other way, so the
+      // table (and everything on it) seems to jump toward it; put back right after this picture.
+      let jx = 0, jz = 0;
+      joltNow = 0;
+      if (jolt && !debugCam) {
+        jolt.t += f.dt;
+        if (jolt.t >= nudgeCfg.seconds) jolt = null;
+        else {
+          const s = nudgeCfg.shift * Math.sin(2 * Math.PI * nudgeCfg.hz * jolt.t) * Math.exp(-nudgeCfg.decay * jolt.t);
+          jx = -jolt.dx * s; jz = -jolt.dz * s; joltNow = s;
+          camera.position.x += jx; camera.position.z += jz;
+          camera.updateMatrixWorld();
+        }
+      }
+
       renderer.render(scene, camera);
+      if (jx || jz) { camera.position.x -= jx; camera.position.z -= jz; camera.updateMatrixWorld(); }
 
       // the small view from above: only while the balls roll and the main view is behind the ball
       const wantMini = mode === 'aim' && !debugCam && st.phase === 'rolling' && mini.w > 0 && !miniBlocked;
@@ -591,7 +636,7 @@ export function createGameView(canvas, geom, data, controls, opts = {}) {
         calls: renderer.info.render.calls, triangles: renderer.info.render.triangles, programs: renderer.info.programs ? renderer.info.programs.length : 0,
         textures: renderer.info.memory.textures, geometries: renderer.info.memory.geometries,
         mini: { fade: miniFade, rect: [mini.x, mini.y, mini.w, mini.h], wide: mini.wide, target: miniRT ? [miniRT.width, miniRT.height] : null },
-        peek: peekX, lookDeg: lookYaw * 180 / Math.PI, tracks: tracks.count(),
+        peek: peekX, lookDeg: lookYaw * 180 / Math.PI, tracks: tracks.count(), nudges: joltCount, jolt: joltNow,
         camera: [camera.position.x, camera.position.y, camera.position.z] };
     },
     dispose() {

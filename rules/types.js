@@ -34,11 +34,32 @@
  * @property {'aim'|'rolling'|'place'} phase   waiting for a shot / balls are moving / the cue ball is in hand
  * @property {Ball[]} balls     always 16, index equals id
  * @property {number} shots     shots taken so far
+ * @property {NudgeState} [nudge]  only while the nudge is switched on (item 41); missing means off
+ */
+
+/**
+ * The nudge (HANDOFF item 41, rules/nudge.js). Present on the state only while the nudge is on, in practice
+ * and in a match alike; it is copied by cloneState and hashed only when present, so a state without it hashes
+ * exactly as before item 41.
+ * @typedef {Object} NudgeState
+ * @property {number[]} next   per player (0, 1; practice uses 0): the first tick at which that player may nudge again
  */
 
 /**
  * What a player does. Passed to step() on the tick it happens.
- * @typedef {ShootAction|PlaceAction} Action
+ * @typedef {ShootAction|PlaceAction|NudgeAction|NudgeSettingAction} Action
+ *
+ * @typedef {Object} NudgeAction   shove the table (item 41, W A S D during a roll). Ignored unless state.nudge exists,
+ *           the phase is 'rolling' (a shot is in play), the tick has reached state.nudge.next[by] and (dirX, dirZ) is
+ *           exactly one of (1,0), (-1,0), (0,1), (0,-1). Never a foul by itself.
+ * @property {'nudge'} type
+ * @property {0|1} by        who nudged: 0 host / player 1 / practice, 1 friend / player 2
+ * @property {number} dirX   the way the balls are kicked relative to the table (the key's way on the screen,
+ * @property {number} dirZ   turned into a table direction by the view)
+ *
+ * @typedef {Object} NudgeSettingAction   practice only: the table's nudge button (ignored in a match)
+ * @property {'nudgeSetting'} type
+ * @property {boolean} on
  *
  * @typedef {Object} ShootAction
  * @property {'shoot'} type
@@ -60,7 +81,11 @@
  * What happened during a tick. `speed` is how hard the hit was (m/s along the line of the hit),
  * so the sound can follow it.
  * @typedef {Object} GameEvent
- * @property {'cueStrike'|'ballBall'|'cushion'|'tableBounce'|'railBounce'|'pocket'|'offTable'|'settled'} type
+ * @property {'cueStrike'|'ballBall'|'cushion'|'tableBounce'|'railBounce'|'pocket'|'offTable'|'settled'|'nudge'} type
+ *           'nudge' (item 41): { player, dirX, dirZ, speed }; every ball on the table got `speed` (m/s) the way
+ *           dirX, dirZ (one of +X, -X, +Z, -Z); the table itself was shoved the other way. Comes before the tick's ball events.
+ * @property {number} [player]  who nudged (nudge)
+ * @property {number} [dirX] @property {number} [dirZ]   the way the balls were kicked (nudge)
  * @property {number} [ball]    the ball it happened to
  * @property {number} [other]   the second ball (ballBall)
  * @property {number} [pocket]  index into TableGeometry.pockets (pocket)
@@ -123,6 +148,13 @@
 //   You win by sinking it in any pocket without a foul. You lose by: sinking it before your
 //   group is gone; sinking it on a shot that is a foul (for example the cue ball drops too); the 8
 //   leaving the table (except on the break). If you foul on the 8 shot and the 8 stays up, it is only a foul.
+// - The nudge (HANDOFF item 41, W A S D, host setting, off by default; createGame opts.nudge): either player may nudge
+//   while a shot is in play (from the strike until the balls rest), each with their own wait. A nudge is never a
+//   foul. Everything it causes belongs to the shot in play and is judged with it by the rules above, for the
+//   shooter, whoever nudged: a ball it drops counts as sunk by the shot, the 8 follows the 8 rules, the cue ball
+//   dropping is the shooter's scratch. Contacts it causes count like any other contact of the shot: if it pushes
+//   the cue ball into a ball (or a ball into the cue ball) before the cue ball has hit anything, that ball is the
+//   shot's first hit; a cushion it causes after the first hit counts as "a ball reached a cushion".
 
 /**
  * The host's choices for a match.
@@ -158,7 +190,7 @@
  * noHitFoul is false unless it is exactly true.
  * Without `breaker` the first break is a coin flip from the seed.
  *
- * A match has no extra actions: 'place' and 'shoot' as in practice. (The 'call' action for the 8's
+ * A match has no extra actions of its own: 'place', 'shoot' and 'nudge' as in practice ('nudgeSetting' is ignored). (The 'call' action for the 8's
  * pocket was removed 2026-11-23, HANDOFF item 38; a state kept from before may still carry a
  * calledPocket field, which is ignored: not copied by cloneState and not in the hash.)
  * A 'place' action obeys placeBehindLine. canPlaceCue() answers for the current state.
